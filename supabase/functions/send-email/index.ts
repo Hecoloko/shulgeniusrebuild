@@ -154,6 +154,10 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error("Invalid email type");
     }
 
+    // Use Resend's free test sender until custom domain is verified
+    // To use your own domain, verify it at https://resend.com/domains
+    const fromEmail = "onboarding@resend.dev";
+    
     // Use Resend API directly via fetch
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -162,7 +166,7 @@ const handler = async (req: Request): Promise<Response> => {
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: "ShulGenius <noreply@shulgenius.com>",
+        from: `ShulGenius <${fromEmail}>`,
         to: [to],
         subject,
         html,
