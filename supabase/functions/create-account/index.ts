@@ -98,13 +98,13 @@ serve(async (req) => {
       );
     }
 
-    // 4. Assign the user as shulowner role (global platform access)
+    // 4. Assign the user as shuladmin for this specific org
     const { error: roleError } = await supabaseAdmin
       .from("user_roles")
       .insert({
         user_id: userId,
-        role: "shulowner",
-        organization_id: null, // shulowner has global access
+        role: "shuladmin",
+        organization_id: org.id,
       });
 
     if (roleError) {
@@ -118,16 +118,7 @@ serve(async (req) => {
       );
     }
 
-    // 5. Also add as shuladmin for this specific org (so they can manage it directly)
-    await supabaseAdmin
-      .from("user_roles")
-      .insert({
-        user_id: userId,
-        role: "shuladmin",
-        organization_id: org.id,
-      });
-
-    // 6. Create organization settings with defaults
+    // 5. Create organization settings with defaults
     await supabaseAdmin
       .from("organization_settings")
       .insert({
@@ -135,7 +126,7 @@ serve(async (req) => {
         active_processor: "stripe",
       });
 
-    console.log(`New shulowner created: ${email} with org: ${org.name}`);
+    console.log(`New shuladmin created: ${email} with org: ${org.name}`);
 
     // Success
     return new Response(
