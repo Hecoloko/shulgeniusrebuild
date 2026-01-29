@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Building2, Save, Loader2, Upload, Image as ImageIcon } from "lucide-react";
+import { Building2, Save, Loader2, Upload, Image as ImageIcon, Plus } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,23 +13,43 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function GeneralTab() {
-  const { user, roles } = useAuth();
+  const { user, roles, isShulowner } = useAuth();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Get the first organization the user has access to
-  const orgId = roles.find(r => r.organization_id)?.organization_id;
+  const orgIdFromRoles = roles.find(r => r.organization_id)?.organization_id;
 
   // Form state
   const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
-  // Fetch organization
-  const { data: org, isLoading } = useQuery({
+  // For shulowner: Fetch first available organization if they don't have one in roles
+  const { data: firstOrg, isLoading: loadingFirstOrg } = useQuery({
+    queryKey: ["first-organization"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("organizations")
+        .select("*")
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: isShulowner && !orgIdFromRoles,
+  });
+
+  // Determine actual orgId to use
+  const orgId = orgIdFromRoles || firstOrg?.id;
+
+  // Fetch organization if we have an ID
+  const { data: org, isLoading: loadingOrg } = useQuery({
     queryKey: ["organization", orgId],
     queryFn: async () => {
       if (!orgId) return null;
@@ -44,10 +64,13 @@ export function GeneralTab() {
     enabled: !!orgId,
   });
 
+  const isLoading = loadingOrg || (isShulowner && loadingFirstOrg);
+
   // Sync form with fetched data
   useEffect(() => {
     if (org) {
       setName(org.name || "");
+      setSlug(org.slug || "");
       setEmail(org.email || "");
       setPhone(org.phone || "");
       setAddress(org.address || "");
@@ -55,18 +78,26 @@ export function GeneralTab() {
     }
   }, [org]);
 
+  // Generate slug from name
+  const generateSlug = (name: string) => {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .trim();
+  };
+
   // Handle logo upload
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !orgId) return;
 
-    // Validate file type
     if (!file.type.startsWith("image/")) {
       toast.error("Please upload an image file");
       return;
     }
 
-    // Validate file size (max 2MB)
     if (file.size > 2 * 1024 * 1024) {
       toast.error("Image must be less than 2MB");
       return;
@@ -96,6 +127,38 @@ export function GeneralTab() {
     }
   };
 
+  // Create organization mutation (for shulowner)
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      if (!name.trim()) throw new Error("Shul name is required");
+      const slugToUse = slug.trim() || generateSlug(name);
+      
+      const { data, error } = await supabase
+        .from("organizations")
+        .insert({ 
+          name: name.trim(), 
+          slug: slugToUse,
+          email: email || null, 
+          phone: phone || null, 
+          address: address || null,
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["first-organization"] });
+      queryClient.invalidateQueries({ queryKey: ["organization", data.id] });
+      setIsCreating(false);
+      toast.success("Organization created successfully!");
+    },
+    onError: (err: Error) => {
+      toast.error("Failed: " + err.message);
+    },
+  });
+
   // Update mutation
   const updateMutation = useMutation({
     mutationFn: async () => {
@@ -123,7 +186,11 @@ export function GeneralTab() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    updateMutation.mutate();
+    if (isCreating) {
+      createMutation.mutate();
+    } else {
+      updateMutation.mutate();
+    }
   };
 
   if (isLoading) {
@@ -143,6 +210,126 @@ export function GeneralTab() {
     );
   }
 
+  // No org exists and user can create one (shulowner)
+  if (!orgId && isShulowner) {
+    if (!isCreating) {
+      return (
+        <Card className="premium-card">
+          <CardContent className="py-12 text-center">
+            <Building2 className="h-12 w-12 mx-auto mb-4 text-gold opacity-70" />
+            <h3 className="text-lg font-semibold mb-2">Welcome to ShulGenius!</h3>
+            <p className="text-muted-foreground mb-6">
+              Create your first organization to get started managing your shul.
+            </p>
+            <Button onClick={() => setIsCreating(true)} className="btn-gold">
+              <Plus className="h-4 w-4 mr-2" />
+              Create Your Shul
+            </Button>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    // Show create form
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
+        <Card className="premium-card border-l-4 border-l-gold">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-gold" />
+              Create Your Organization
+            </CardTitle>
+            <CardDescription>Enter your shul's basic information to get started</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="create-name">Shul Name *</Label>
+                <Input
+                  id="create-name"
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    if (!slug) setSlug(generateSlug(e.target.value));
+                  }}
+                  placeholder="Congregation Beth Israel"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="create-slug">URL Slug *</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">shulgenius.com/</span>
+                  <Input
+                    id="create-slug"
+                    value={slug}
+                    onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                    placeholder="beth-israel"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="create-email">Email</Label>
+                  <Input
+                    id="create-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="info@yourshul.org"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="create-phone">Phone</Label>
+                  <Input
+                    id="create-phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="(555) 123-4567"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="create-address">Address</Label>
+                <Textarea
+                  id="create-address"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="123 Main Street, City, State 12345"
+                  rows={2}
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <Button type="button" variant="outline" onClick={() => setIsCreating(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={createMutation.isPending} className="btn-gold">
+                  {createMutation.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="mr-2 h-4 w-4" />
+                  )}
+                  Create Organization
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </motion.div>
+    );
+  }
+
+  // No org and not shulowner
   if (!orgId) {
     return (
       <Card className="premium-card">
@@ -173,7 +360,6 @@ export function GeneralTab() {
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-6">
-            {/* Logo Preview */}
             <div className="relative">
               <div className="w-24 h-24 rounded-xl border-2 border-dashed border-muted-foreground/30 flex items-center justify-center bg-muted/30 overflow-hidden">
                 {logoUrl ? (
@@ -193,7 +379,6 @@ export function GeneralTab() {
               )}
             </div>
 
-            {/* Upload Button */}
             <div className="space-y-2">
               <input
                 ref={fileInputRef}
@@ -230,7 +415,6 @@ export function GeneralTab() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Shul Name */}
             <div className="space-y-2">
               <Label htmlFor="shul-name">Shul Name *</Label>
               <Input
@@ -242,7 +426,6 @@ export function GeneralTab() {
               />
             </div>
 
-            {/* Email & Phone */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="shul-email">Email</Label>
@@ -266,7 +449,6 @@ export function GeneralTab() {
               </div>
             </div>
 
-            {/* Address */}
             <div className="space-y-2">
               <Label htmlFor="shul-address">Address</Label>
               <Textarea
@@ -278,7 +460,6 @@ export function GeneralTab() {
               />
             </div>
 
-            {/* Submit */}
             <div className="flex justify-end pt-4 border-t">
               <Button type="submit" disabled={updateMutation.isPending} className="btn-gold">
                 {updateMutation.isPending ? (

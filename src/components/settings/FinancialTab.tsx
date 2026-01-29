@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useCurrentOrg } from "@/hooks/useCurrentOrg";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,9 +24,8 @@ type ItemType = "subscription" | "one_time";
 type BillingInterval = "weekly" | "monthly" | "quarterly" | "yearly";
 
 export function FinancialTab() {
-  const { roles } = useAuth();
+  const { orgId, isLoading: orgLoading, noOrgExists } = useCurrentOrg();
   const queryClient = useQueryClient();
-  const orgId = roles.find(r => r.organization_id)?.organization_id;
 
   // Dialog states
   const [processorOpen, setProcessorOpen] = useState(false);
@@ -233,7 +232,7 @@ export function FinancialTab() {
     }).format(amount);
   };
 
-  const isLoading = settingsLoading || itemsLoading;
+  const isLoading = orgLoading || settingsLoading || itemsLoading;
 
   if (isLoading) {
     return (
@@ -246,12 +245,13 @@ export function FinancialTab() {
     );
   }
 
-  if (!orgId) {
+  if (!orgId || noOrgExists) {
     return (
       <Card className="premium-card">
         <CardContent className="py-12 text-center text-muted-foreground">
           <CreditCard className="h-12 w-12 mx-auto mb-4 opacity-30" />
-          <p>No organization assigned</p>
+          <p>No organization available</p>
+          <p className="text-sm mt-1">Create an organization in the General tab first</p>
         </CardContent>
       </Card>
     );

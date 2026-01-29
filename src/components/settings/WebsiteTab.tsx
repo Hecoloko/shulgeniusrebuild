@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Globe, Copy, ExternalLink, Info, Save, Loader2, Check, AlertCircle } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useCurrentOrg } from "@/hooks/useCurrentOrg";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,9 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export function WebsiteTab() {
-  const { roles } = useAuth();
+  const { orgId, isLoading: orgLoading, noOrgExists } = useCurrentOrg();
   const queryClient = useQueryClient();
-  const orgId = roles.find(r => r.organization_id)?.organization_id;
 
   // Form state
   const [slug, setSlug] = useState("");
@@ -23,7 +22,7 @@ export function WebsiteTab() {
   const [slugError, setSlugError] = useState("");
 
   // Fetch organization for slug
-  const { data: org, isLoading } = useQuery({
+  const { data: org, isLoading: orgDataLoading } = useQuery({
     queryKey: ["organization", orgId],
     queryFn: async () => {
       if (!orgId) return null;
@@ -103,6 +102,8 @@ export function WebsiteTab() {
     if (cleaned) validateSlug(cleaned);
   };
 
+  const isLoading = orgLoading || orgDataLoading;
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -118,12 +119,13 @@ export function WebsiteTab() {
     );
   }
 
-  if (!orgId) {
+  if (!orgId || noOrgExists) {
     return (
       <Card className="premium-card">
         <CardContent className="py-12 text-center text-muted-foreground">
           <Globe className="h-12 w-12 mx-auto mb-4 opacity-30" />
-          <p>No organization assigned</p>
+          <p>No organization available</p>
+          <p className="text-sm mt-1">Create an organization in the General tab first</p>
         </CardContent>
       </Card>
     );
