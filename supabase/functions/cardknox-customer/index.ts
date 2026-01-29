@@ -169,7 +169,6 @@ serve(async (req) => {
         xKey: transactionKey!,
         xCommand: "cc:save",
         xCardNum: input.cardNumber,
-        xTokenOnly: "true",
       };
 
       if (input.cardExp) payload.xExp = input.cardExp;
