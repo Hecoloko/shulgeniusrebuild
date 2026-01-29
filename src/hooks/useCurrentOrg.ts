@@ -11,16 +11,17 @@ export function useCurrentOrg() {
   const { roles, isShulowner } = useAuth();
   
   // Get org ID from user's roles (for shuladmin/shulmember)
-  const orgIdFromRoles = roles.find(r => r.organization_id)?.organization_id;
+  const orgIdFromRoles = roles?.find(r => r.organization_id)?.organization_id;
 
   // Fetch organization details when user has org in their role
   const { data: orgFromRole, isLoading: loadingOrgFromRole } = useQuery({
-    queryKey: ["organization", orgIdFromRoles],
+    queryKey: ["organization", orgIdFromRoles ?? "none"],
     queryFn: async () => {
+      if (!orgIdFromRoles) return null;
       const { data, error } = await supabase
         .from("organizations")
         .select("id, slug, name")
-        .eq("id", orgIdFromRoles!)
+        .eq("id", orgIdFromRoles)
         .maybeSingle();
       if (error) throw error;
       return data;
