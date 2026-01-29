@@ -42,6 +42,7 @@ export default function MemberDetail() {
     amount: number;
     frequency: string;
   } | null>(null);
+  const [deletingCardId, setDeletingCardId] = useState<string | null>(null);
 
   // Edit form state
   const [editFirstName, setEditFirstName] = useState("");
@@ -288,6 +289,25 @@ export default function MemberDetail() {
     },
     onError: (err: Error) => {
       toast.error("Failed to delete subscription: " + err.message);
+    },
+  });
+
+  // Delete payment method mutation
+  const deletePaymentMethodMutation = useMutation({
+    mutationFn: async (paymentMethodId: string) => {
+      const { error } = await supabase
+        .from("payment_methods")
+        .delete()
+        .eq("id", paymentMethodId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["member-payment-methods", memberId] });
+      toast.success("Card deleted successfully");
+      setDeletingCardId(null);
+    },
+    onError: (err: Error) => {
+      toast.error("Failed to delete card: " + err.message);
     },
   });
 
@@ -920,27 +940,76 @@ export default function MemberDetail() {
                 <CardContent>
                   {paymentMethods && paymentMethods.length > 0 ? (
                     <div className="grid md:grid-cols-2 gap-4">
-                      {paymentMethods.map((pm) => (
-                        <div
-                          key={pm.id}
-                          className="flex items-center gap-4 p-4 border rounded-lg"
-                        >
-                          <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center">
-                            <CreditCard className="h-6 w-6" />
+                      {paymentMethods.map((pm) => {
+                        const displayName = pm.nickname 
+                          ? `${pm.nickname} - ${pm.card_brand || "Card"} •••• ${pm.card_last_four}`
+                          : `${pm.card_brand || "Card"} •••• ${pm.card_last_four}`;
+                        
+                        return (
+                          <div
+                            key={pm.id}
+                            className="flex items-center gap-4 p-4 border rounded-lg"
+                          >
+                            <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center">
+                              <CreditCard className="h-6 w-6" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-medium">{displayName}</p>
+                              <p className="text-sm text-muted-foreground">
+                                Expires {pm.exp_month}/{pm.exp_year}
+                              </p>
+                            </div>
+                            {pm.is_default && (
+                              <Badge variant="secondary">Default</Badge>
+                            )}
+                            <AlertDialog 
+                              open={deletingCardId === pm.id}
+                              onOpenChange={(open) => !open && setDeletingCardId(null)}
+                            >
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  onClick={() => setDeletingCardId(pm.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Payment Method</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to delete this payment method?
+                                    <div className="mt-4 p-3 bg-muted rounded-lg">
+                                      <p className="font-medium">{displayName}</p>
+                                      <p className="text-sm text-muted-foreground">
+                                        Expires {pm.exp_month}/{pm.exp_year}
+                                      </p>
+                                    </div>
+                                    <p className="mt-4 text-destructive font-medium">
+                                      This action cannot be undone.
+                                    </p>
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    onClick={() => deletePaymentMethodMutation.mutate(pm.id)}
+                                    disabled={deletePaymentMethodMutation.isPending}
+                                  >
+                                    {deletePaymentMethodMutation.isPending && (
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    )}
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </div>
-                          <div className="flex-1">
-                            <p className="font-medium">
-                              {pm.card_brand || "Card"} •••• {pm.card_last_four}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              Expires {pm.exp_month}/{pm.exp_year}
-                            </p>
-                          </div>
-                          {pm.is_default && (
-                            <Badge variant="secondary">Default</Badge>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="text-center py-8 text-muted-foreground">

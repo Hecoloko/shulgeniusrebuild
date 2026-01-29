@@ -558,6 +558,7 @@ export type Database = {
           id: string
           is_default: boolean
           member_id: string
+          nickname: string | null
           processor: string
           processor_customer_id: string | null
           processor_id: string | null
@@ -572,6 +573,7 @@ export type Database = {
           id?: string
           is_default?: boolean
           member_id: string
+          nickname?: string | null
           processor: string
           processor_customer_id?: string | null
           processor_id?: string | null
@@ -586,6 +588,7 @@ export type Database = {
           id?: string
           is_default?: boolean
           member_id?: string
+          nickname?: string | null
           processor?: string
           processor_customer_id?: string | null
           processor_id?: string | null
@@ -911,7 +914,13 @@ export type Database = {
     Enums: {
       app_role: "shulowner" | "shuladmin" | "shulmember"
       campaign_type: "drive" | "fund"
-      invoice_status: "draft" | "sent" | "paid" | "void" | "overdue"
+      invoice_status:
+        | "draft"
+        | "sent"
+        | "paid"
+        | "void"
+        | "overdue"
+        | "partially_paid"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1041,7 +1050,14 @@ export const Constants = {
     Enums: {
       app_role: ["shulowner", "shuladmin", "shulmember"],
       campaign_type: ["drive", "fund"],
-      invoice_status: ["draft", "sent", "paid", "void", "overdue"],
+      invoice_status: [
+        "draft",
+        "sent",
+        "paid",
+        "void",
+        "overdue",
+        "partially_paid",
+      ],
     },
   },
 } as const
