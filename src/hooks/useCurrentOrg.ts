@@ -31,11 +31,13 @@ export function useCurrentOrg() {
 
   // Determine actual orgId to use
   const orgId = orgIdFromRoles || firstOrg?.id || null;
+  const orgSlug = firstOrg?.slug || null;
   const isLoading = isShulowner && !orgIdFromRoles && loadingFirstOrg;
   const noOrgExists = isShulowner && !orgIdFromRoles && !loadingFirstOrg && !firstOrg;
 
   return {
     orgId,
+    orgSlug,
     isLoading,
     isShulowner,
     noOrgExists, // True when shulowner and no orgs exist yet

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion } from "framer-motion";
-import { Plus, DollarSign, Settings, Pencil, Link2, Trash2 } from "lucide-react";
+import { Plus, DollarSign, Settings, Pencil, Link2, Trash2, ExternalLink } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentOrg } from "@/hooks/useCurrentOrg";
@@ -9,9 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { CreateCampaignModal } from "@/components/campaigns/CreateCampaignModal";
+import { CampaignProcessorsModal } from "@/components/campaigns/CampaignProcessorsModal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,11 +25,26 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+interface Campaign {
+  id: string;
+  name: string;
+  type: "drive" | "fund";
+  description: string | null;
+  goal_amount: number | null;
+  raised_amount: number;
+  start_date: string | null;
+  end_date: string | null;
+  is_active: boolean;
+  organization_id: string;
+  campaign_processors: any[];
+}
+
 export default function Campaigns() {
-  const { orgId, isLoading: orgLoading } = useCurrentOrg();
+  const { orgId, orgSlug, isLoading: orgLoading } = useCurrentOrg();
   const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [processorsCampaign, setProcessorsCampaign] = useState<Campaign | null>(null);
 
   // Fetch campaigns with processors
   const { data: campaigns, isLoading: campaignsLoading } = useQuery({
@@ -260,23 +277,61 @@ export default function Campaigns() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <Link2 className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <Settings className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => setDeleteId(campaign.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Edit Campaign</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => {
+                                  if (orgSlug) {
+                                    const url = `${window.location.origin}/s/${orgSlug}/campaign/${campaign.id}`;
+                                    navigator.clipboard.writeText(url);
+                                    toast.success("Campaign URL copied to clipboard");
+                                  } else {
+                                    toast.error("Organization slug not found");
+                                  }
+                                }}
+                              >
+                                <Link2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Copy Campaign URL</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => setProcessorsCampaign(campaign)}
+                              >
+                                <Settings className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Manage Payment Processors</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                onClick={() => setDeleteId(campaign.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Delete Campaign</TooltipContent>
+                          </Tooltip>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -289,6 +344,13 @@ export default function Campaigns() {
 
         {/* Create Modal */}
         <CreateCampaignModal open={showCreateModal} onOpenChange={setShowCreateModal} />
+
+        {/* Processors Modal */}
+        <CampaignProcessorsModal
+          campaign={processorsCampaign}
+          open={!!processorsCampaign}
+          onOpenChange={(open) => !open && setProcessorsCampaign(null)}
+        />
 
         {/* Delete Confirmation */}
         <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
