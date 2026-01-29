@@ -1,10 +1,10 @@
 import { motion } from "framer-motion";
-import { Settings as SettingsIcon } from "lucide-react";
+import { Settings as SettingsIcon, User, Building2, Shield } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { ProfileSettings } from "@/components/settings/ProfileSettings";
-import { OrganizationSettings } from "@/components/settings/OrganizationSettings";
-import { RoleInfo } from "@/components/settings/RoleInfo";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ProfileTab } from "@/components/settings/ProfileTab";
+import { OrganizationsTab } from "@/components/settings/OrganizationsTab";
+import { RolesTab } from "@/components/settings/RolesTab";
 
 export default function Settings() {
   return (
@@ -30,27 +30,30 @@ export default function Settings() {
       {/* Settings Tabs */}
       <Tabs defaultValue="profile" className="space-y-6">
         <TabsList className="bg-muted/50 p-1">
-          <TabsTrigger value="profile" className="data-[state=active]:bg-card">
+          <TabsTrigger value="profile" className="data-[state=active]:bg-card gap-2">
+            <User className="h-4 w-4" />
             Profile
           </TabsTrigger>
-          <TabsTrigger value="organizations" className="data-[state=active]:bg-card">
+          <TabsTrigger value="organizations" className="data-[state=active]:bg-card gap-2">
+            <Building2 className="h-4 w-4" />
             Organizations
           </TabsTrigger>
-          <TabsTrigger value="roles" className="data-[state=active]:bg-card">
-            Roles & Permissions
+          <TabsTrigger value="roles" className="data-[state=active]:bg-card gap-2">
+            <Shield className="h-4 w-4" />
+            Roles
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="profile" className="space-y-6">
-          <ProfileSettings />
+        <TabsContent value="profile">
+          <ProfileTab />
         </TabsContent>
 
-        <TabsContent value="organizations" className="space-y-6">
-          <OrganizationSettings />
+        <TabsContent value="organizations">
+          <OrganizationsTab />
         </TabsContent>
 
-        <TabsContent value="roles" className="space-y-6">
-          <RoleInfo />
+        <TabsContent value="roles">
+          <RolesTab />
         </TabsContent>
       </Tabs>
     </DashboardLayout>
