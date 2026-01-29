@@ -12,6 +12,9 @@ import Campaigns from "./pages/Campaigns";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import PublicShul from "./pages/PublicShul";
+import MemberPortal from "./pages/MemberPortal";
+import MemberLogin from "./pages/MemberLogin";
+import MemberSetupPassword from "./pages/MemberSetupPassword";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,6 +30,10 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             {/* Public Shul Page */}
             <Route path="/s/:slug" element={<PublicShul />} />
+            {/* Member Portal Routes */}
+            <Route path="/portal" element={<MemberPortal />} />
+            <Route path="/portal/login" element={<MemberLogin />} />
+            <Route path="/portal/setup" element={<MemberSetupPassword />} />
             <Route
               path="/"
               element={

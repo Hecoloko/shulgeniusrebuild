@@ -14,6 +14,7 @@ interface EmailRequest {
   shulName: string;
   memberName?: string;
   portalUrl?: string;
+  setupUrl?: string;
   adminEmail?: string;
 }
 
@@ -24,7 +25,7 @@ const handler = async (req: Request): Promise<Response> => {
 
   try {
     const body: EmailRequest = await req.json();
-    const { type, to, shulName, memberName, portalUrl, adminEmail } = body;
+    const { type, to, shulName, memberName, portalUrl, setupUrl, adminEmail } = body;
 
     if (!type || !to || !shulName) {
       throw new Error("Missing required fields: type, to, shulName");
@@ -89,7 +90,7 @@ const handler = async (req: Request): Promise<Response> => {
         </html>
       `;
     } else if (type === "member_invite") {
-      subject = `You've been added to ${shulName}`;
+      subject = `You've been invited to ${shulName}`;
       html = `
         <!DOCTYPE html>
         <html>
@@ -115,9 +116,9 @@ const handler = async (req: Request): Promise<Response> => {
             <div class="content">
               <p>Shalom${memberName ? ` ${memberName}` : ''},</p>
               
-              <p>You've been added as a member of <strong>${shulName}</strong>!</p>
+              <p>You've been invited to join <strong>${shulName}</strong> as a member!</p>
               
-              <p>Through the member portal, you can:</p>
+              <p>Set up your account to access your member portal where you can:</p>
               <ul>
                 <li>💳 View and pay your invoices</li>
                 <li>💰 Make donations to the shul</li>
@@ -125,11 +126,18 @@ const handler = async (req: Request): Promise<Response> => {
                 <li>📊 View your account balance</li>
               </ul>
 
-              ${portalUrl ? `
+              ${setupUrl ? `
+              <p style="text-align: center;">
+                <a href="${setupUrl}" class="cta">Set Up Your Account →</a>
+              </p>
+              <p style="text-align: center; font-size: 12px; color: #666;">
+                This link will expire in 7 days.
+              </p>
+              ` : (portalUrl ? `
               <p style="text-align: center;">
                 <a href="${portalUrl}" class="cta">Access Member Portal →</a>
               </p>
-              ` : ''}
+              ` : '')}
 
               <p>If you have any questions, please contact ${adminEmail || 'the shul administration'}.</p>
               

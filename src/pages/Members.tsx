@@ -150,12 +150,21 @@ export default function Members() {
     },
   });
 
-  // Send member invite email
+  // Send member invite email with password setup link
   const sendMemberInviteEmail = async (member: any) => {
     try {
       if (!org) return;
       
-      const portalUrl = `${window.location.origin}/s/${org.slug}`;
+      // Get the invite token from the member record
+      const { data: memberWithToken } = await supabase
+        .from("members")
+        .select("invite_token")
+        .eq("id", member.id)
+        .single();
+      
+      const setupUrl = memberWithToken?.invite_token 
+        ? `${window.location.origin}/portal/setup?token=${memberWithToken.invite_token}`
+        : null;
       
       const response = await supabase.functions.invoke("send-email", {
         body: {
@@ -163,7 +172,8 @@ export default function Members() {
           to: member.email,
           shulName: org.name,
           memberName: `${member.first_name} ${member.last_name}`,
-          portalUrl,
+          setupUrl,
+          portalUrl: `${window.location.origin}/portal`,
           adminEmail: org.email,
         },
       });
