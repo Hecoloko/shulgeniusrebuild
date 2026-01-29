@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -6,40 +7,31 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentOrg } from "@/hooks/useCurrentOrg";
 import { toast } from "sonner";
 import {
-  Users, Plus, Search, CreditCard, Mail, Phone,
-  Loader2, MoreHorizontal, ChevronRight, Wallet, X
+  Users, Plus, Search, Mail, Phone,
+  Loader2, ChevronRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Members() {
   const { orgId, isLoading: orgLoading } = useCurrentOrg();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   
   const [search, setSearch] = useState("");
   const [addMemberOpen, setAddMemberOpen] = useState(false);
-  const [selectedMember, setSelectedMember] = useState<any>(null);
-  const [addCardOpen, setAddCardOpen] = useState(false);
   
   // New member form
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  
-  // Add card form
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardExp, setCardExp] = useState("");
-  const [cardCvv, setCardCvv] = useState("");
-  const [selectedProcessor, setSelectedProcessor] = useState<string>("");
 
   // Fetch members
   const { data: members, isLoading: membersLoading } = useQuery({
@@ -63,14 +55,14 @@ export default function Members() {
     enabled: !!orgId,
   });
 
-  // Fetch organization settings for processor info
+  // Fetch organization settings for Cardknox check
   const { data: settings } = useQuery({
     queryKey: ["org-settings", orgId],
     queryFn: async () => {
       if (!orgId) return null;
       const { data, error } = await supabase
         .from("organization_settings")
-        .select("*")
+        .select("cardknox_transaction_key")
         .eq("organization_id", orgId)
         .maybeSingle();
       if (error) throw error;
@@ -93,21 +85,6 @@ export default function Members() {
       return data;
     },
     enabled: !!orgId,
-  });
-
-  // Fetch payment methods for selected member
-  const { data: paymentMethods } = useQuery({
-    queryKey: ["payment-methods", selectedMember?.id],
-    queryFn: async () => {
-      if (!selectedMember?.id) return [];
-      const { data, error } = await supabase
-        .from("payment_methods")
-        .select("*")
-        .eq("member_id", selectedMember.id);
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!selectedMember?.id,
   });
 
   // Add member mutation
@@ -214,58 +191,11 @@ export default function Members() {
     }
   };
 
-  // Add card mutation (for Cardknox)
-  const addCardMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedMember || !cardNumber || !cardExp) {
-        throw new Error("Card details required");
-      }
-      
-      // For a real implementation, you'd use Cardknox iFields for secure tokenization
-      // This is a simplified version that would need the iFields SDK integration
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Not authenticated");
-      
-      // In production, cardNumber would be tokenized client-side using iFields
-      // For now, we'll simulate with a token
-      const response = await supabase.functions.invoke("cardknox-customer", {
-        body: {
-          action: "save_card",
-          organizationId: orgId,
-          memberId: selectedMember.id,
-          memberEmail: selectedMember.email,
-          memberName: `${selectedMember.first_name} ${selectedMember.last_name}`,
-          cardToken: cardNumber, // In production, this would be an iFields token
-          cardExp: cardExp.replace("/", ""), // Convert MM/YY to MMYY
-        },
-      });
-      
-      if (response.error) throw new Error(response.error.message);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["payment-methods", selectedMember?.id] });
-      toast.success("Card added successfully and synced to Cardknox");
-      setAddCardOpen(false);
-      resetCardForm();
-    },
-    onError: (err: Error) => {
-      toast.error("Failed: " + err.message);
-    },
-  });
-
   const resetMemberForm = () => {
     setFirstName("");
     setLastName("");
     setEmail("");
     setPhone("");
-  };
-
-  const resetCardForm = () => {
-    setCardNumber("");
-    setCardExp("");
-    setCardCvv("");
-    setSelectedProcessor("");
   };
 
   const formatCurrency = (amount: number) => {
@@ -274,14 +204,6 @@ export default function Members() {
       currency: "USD",
     }).format(amount);
   };
-
-  const availableProcessors = [];
-  if (settings?.cardknox_transaction_key) {
-    availableProcessors.push({ id: "cardknox", name: "Cardknox" });
-  }
-  if (settings?.stripe_account_id) {
-    availableProcessors.push({ id: "stripe", name: "Stripe" });
-  }
 
   const isLoading = orgLoading || membersLoading;
 
@@ -422,7 +344,7 @@ export default function Members() {
                     <TableRow
                       key={member.id}
                       className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => setSelectedMember(member)}
+                      onClick={() => navigate(`/members/${member.id}`)}
                     >
                       <TableCell className="font-medium">
                         {member.first_name} {member.last_name}
@@ -472,197 +394,6 @@ export default function Members() {
             )}
           </CardContent>
         </Card>
-
-        {/* Member Detail Sheet */}
-        <Sheet open={!!selectedMember} onOpenChange={(open) => !open && setSelectedMember(null)}>
-          <SheetContent className="w-full sm:max-w-lg">
-            <SheetHeader>
-              <SheetTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                {selectedMember?.first_name} {selectedMember?.last_name}
-              </SheetTitle>
-              <SheetDescription>
-                Member details and payment methods
-              </SheetDescription>
-            </SheetHeader>
-
-            {selectedMember && (
-              <div className="mt-6 space-y-6">
-                {/* Contact Info */}
-                <div className="space-y-3">
-                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-                    Contact Information
-                  </h3>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      {selectedMember.email}
-                    </div>
-                    {selectedMember.phone && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Phone className="h-4 w-4 text-muted-foreground" />
-                        {selectedMember.phone}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Balance */}
-                <div className="space-y-3">
-                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-                    Account Balance
-                  </h3>
-                  <div className="text-2xl font-bold">
-                    {formatCurrency(selectedMember.balance)}
-                  </div>
-                </div>
-
-                {/* Payment Methods */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-                      Payment Methods
-                    </h3>
-                    {availableProcessors.length > 0 && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setAddCardOpen(true)}
-                      >
-                        <Plus className="h-3 w-3 mr-1" />
-                        Add Card
-                      </Button>
-                    )}
-                  </div>
-
-                  {paymentMethods && paymentMethods.length > 0 ? (
-                    <div className="space-y-2">
-                      {paymentMethods.map((pm) => (
-                        <div
-                          key={pm.id}
-                          className="flex items-center justify-between p-3 rounded-lg border bg-muted/30"
-                        >
-                          <div className="flex items-center gap-3">
-                            <CreditCard className="h-5 w-5 text-muted-foreground" />
-                            <div>
-                              <p className="text-sm font-medium">
-                                {pm.card_brand} •••• {pm.card_last_four}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                Exp: {pm.exp_month}/{pm.exp_year} • {pm.processor}
-                              </p>
-                            </div>
-                          </div>
-                          {pm.is_default && (
-                            <Badge variant="secondary">Default</Badge>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-6 text-muted-foreground border rounded-lg bg-muted/30">
-                      <Wallet className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm">No payment methods on file</p>
-                      {availableProcessors.length === 0 && (
-                        <p className="text-xs mt-1">Configure a payment processor in Settings first</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </SheetContent>
-        </Sheet>
-
-        {/* Add Card Dialog */}
-        <Dialog open={addCardOpen} onOpenChange={setAddCardOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add Payment Card</DialogTitle>
-              <DialogDescription>
-                Add a card for {selectedMember?.first_name} {selectedMember?.last_name}
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Payment Processor</Label>
-                <Select value={selectedProcessor} onValueChange={setSelectedProcessor}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select processor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableProcessors.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {selectedProcessor === "cardknox" && (
-                <>
-                  <div className="p-3 rounded-lg bg-muted/50 border text-sm text-muted-foreground">
-                    <p>For production use, this would use Cardknox iFields for secure card entry.</p>
-                    <p className="mt-1">Cards saved here sync directly to your Cardknox/Sola dashboard.</p>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="cardNumber">Card Number</Label>
-                    <Input
-                      id="cardNumber"
-                      placeholder="4111 1111 1111 1111"
-                      value={cardNumber}
-                      onChange={(e) => setCardNumber(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="cardExp">Expiration</Label>
-                      <Input
-                        id="cardExp"
-                        placeholder="MM/YY"
-                        value={cardExp}
-                        onChange={(e) => setCardExp(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cardCvv">CVV</Label>
-                      <Input
-                        id="cardCvv"
-                        placeholder="123"
-                        value={cardCvv}
-                        onChange={(e) => setCardCvv(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {selectedProcessor === "stripe" && (
-                <div className="p-3 rounded-lg bg-muted/50 border text-sm text-muted-foreground">
-                  Stripe card entry coming soon. Configure Cardknox for immediate use.
-                </div>
-              )}
-            </div>
-
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setAddCardOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                className="btn-gold"
-                onClick={() => addCardMutation.mutate()}
-                disabled={addCardMutation.isPending || !selectedProcessor || selectedProcessor === "stripe"}
-              >
-                {addCardMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Save Card
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </motion.div>
     </DashboardLayout>
   );
