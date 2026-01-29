@@ -13,6 +13,7 @@ import Campaigns from "./pages/Campaigns";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import PublicShul from "./pages/PublicShul";
+import PublicCampaign from "./pages/PublicCampaign";
 import MemberPortal from "./pages/MemberPortal";
 import MemberLogin from "./pages/MemberLogin";
 import MemberSetupPassword from "./pages/MemberSetupPassword";
@@ -31,6 +32,8 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             {/* Public Shul Page */}
             <Route path="/s/:slug" element={<PublicShul />} />
+            {/* Public Campaign Page */}
+            <Route path="/s/:slug/campaign/:campaignId" element={<PublicCampaign />} />
             {/* Member Portal Routes */}
             <Route path="/portal" element={<MemberPortal />} />
             <Route path="/portal/login" element={<MemberLogin />} />
