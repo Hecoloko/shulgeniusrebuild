@@ -7,22 +7,20 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const CARDKNOX_API_BASE = "https://api.cardknox.com/v2";
+
 interface CardknoxRequest {
   action: "create_customer" | "save_card";
   organizationId: string;
   memberId: string;
   memberEmail: string;
   memberName: string;
-  // Processor ID to use specific credentials
   processorId?: string;
   // For save_card action
   cardToken?: string;
-  cardNumber?: string;
   cardExp?: string; // MMYY format
-  cardCvc?: string;
   zipCode?: string;
   isDefault?: boolean;
-  nickname?: string;
 }
 
 serve(async (req) => {
@@ -55,12 +53,9 @@ serve(async (req) => {
       memberName, 
       processorId,
       cardToken, 
-      cardNumber,
       cardExp,
-      cardCvc,
       zipCode,
       isDefault,
-      nickname
     } = body;
 
     if (!action || !organizationId || !memberId) {
@@ -81,7 +76,6 @@ serve(async (req) => {
     let processorType = "cardknox";
 
     if (processorId) {
-      // Get credentials from payment_processors table
       const { data: processor, error: processorError } = await supabaseAdmin
         .from("payment_processors")
         .select("processor_type, credentials")
@@ -100,7 +94,6 @@ serve(async (req) => {
       const credentials = processor.credentials as { transaction_key?: string; ifields_key?: string };
       transactionKey = credentials?.transaction_key || null;
     } else {
-      // Fallback to organization settings
       const { data: settings, error: settingsError } = await supabaseAdmin
         .from("organization_settings")
         .select("cardknox_transaction_key, cardknox_ifields_key")
@@ -124,34 +117,52 @@ serve(async (req) => {
       );
     }
 
+    // Check if member already has a Cardknox customer ID stored
+    const { data: existingMember } = await supabaseAdmin
+      .from("payment_methods")
+      .select("processor_customer_id")
+      .eq("member_id", memberId)
+      .eq("processor", "cardknox")
+      .limit(1)
+      .maybeSingle();
+
+    let cardknoxCustomerId = existingMember?.processor_customer_id || null;
+
+    // Helper function to call Cardknox Recurring API
+    async function callCardknoxAPI(endpoint: string, data: Record<string, unknown>) {
+      const response = await fetch(`${CARDKNOX_API_BASE}${endpoint}`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": transactionKey!,
+          "X-Recurring-Api-Version": "2.1",
+        },
+        body: JSON.stringify({
+          SoftwareName: "ShulGenius",
+          SoftwareVersion: "1.0",
+          ...data,
+        }),
+      });
+      return await response.json();
+    }
+
     if (action === "create_customer") {
-      // Create customer in Cardknox using their Gateway JSON API
+      // Create customer in Cardknox using their Recurring API
       const customerData = {
-        xKey: transactionKey,
-        xVersion: "5.0.0",
-        xSoftwareName: "ShulGenius",
-        xSoftwareVersion: "1.0.0",
-        xCommand: "customer:add",
-        xCustomerID: memberId,
-        xBillFirstName: memberName.split(" ")[0] || memberName,
-        xBillLastName: memberName.split(" ").slice(1).join(" ") || "",
-        xEmail: memberEmail,
+        CustomerNumber: memberId,
+        Email: memberEmail,
+        BillFirstName: memberName.split(" ")[0] || memberName,
+        BillLastName: memberName.split(" ").slice(1).join(" ") || "",
       };
 
-      console.log("Sending customer create request:", JSON.stringify({ ...customerData, xKey: "[REDACTED]" }));
+      console.log("Creating customer in Cardknox:", JSON.stringify(customerData));
 
-      const response = await fetch("https://x1.cardknox.com/gatewayjson", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(customerData),
-      });
-
-      const result = await response.json();
+      const result = await callCardknoxAPI("/CreateCustomer", customerData);
       console.log("Cardknox customer create response:", result);
 
-      if (result.xResult !== "A") {
+      if (result.Result !== "S") {
         return new Response(
-          JSON.stringify({ error: result.xError || "Failed to create customer in Cardknox" }),
+          JSON.stringify({ error: result.Error || "Failed to create customer in Cardknox" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -159,7 +170,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           success: true,
-          customerId: result.xCustomerID || memberId,
+          customerId: result.CustomerId,
           message: "Customer created in Cardknox",
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -167,110 +178,59 @@ serve(async (req) => {
     }
 
     if (action === "save_card") {
-      // Need either cardToken or cardNumber
-      if (!cardToken && !cardNumber) {
+      if (!cardToken) {
         return new Response(
-          JSON.stringify({ error: "Card token or card number is required" }),
+          JSON.stringify({ error: "Card token is required" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // First, ensure customer exists in Cardknox
-      const customerCheckData = {
-        xKey: transactionKey,
-        xVersion: "5.0.0",
-        xSoftwareName: "ShulGenius",
-        xSoftwareVersion: "1.0.0",
-        xCommand: "customer:report",
-        xCustomerID: memberId,
-      };
-
-      const customerCheckResponse = await fetch("https://x1.cardknox.com/gatewayjson", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(customerCheckData),
-      });
-
-      const customerCheckResult = await customerCheckResponse.json();
-      
-      // If customer doesn't exist, create them first
-      if (customerCheckResult.xResult !== "A" || !customerCheckResult.xCustomerID) {
-        console.log("Creating customer in Cardknox...");
-        const createCustomerData = {
-          xKey: transactionKey,
-          xVersion: "5.0.0",
-          xSoftwareName: "ShulGenius",
-          xSoftwareVersion: "1.0.0",
-          xCommand: "customer:add",
-          xCustomerID: memberId,
-          xBillFirstName: memberName.split(" ")[0] || memberName,
-          xBillLastName: memberName.split(" ").slice(1).join(" ") || "",
-          xEmail: memberEmail,
+      // If no existing customer, create one first
+      if (!cardknoxCustomerId) {
+        console.log("Creating customer in Cardknox first...");
+        const customerData = {
+          CustomerNumber: memberId,
+          Email: memberEmail,
+          BillFirstName: memberName.split(" ")[0] || memberName,
+          BillLastName: memberName.split(" ").slice(1).join(" ") || "",
         };
 
-        const createResponse = await fetch("https://x1.cardknox.com/gatewayjson", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(createCustomerData),
-        });
-
-        const createResult = await createResponse.json();
+        const createResult = await callCardknoxAPI("/CreateCustomer", customerData);
         console.log("Customer creation result:", createResult);
         
-        if (createResult.xResult !== "A") {
-          // If error is not "customer already exists", fail
-          if (!createResult.xError?.toLowerCase().includes("exists")) {
-            return new Response(
-              JSON.stringify({ error: createResult.xError || "Failed to create customer" }),
-              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
+        if (createResult.Result !== "S") {
+          return new Response(
+            JSON.stringify({ error: createResult.Error || "Failed to create customer" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
+        cardknoxCustomerId = createResult.CustomerId;
       }
 
-      // Save card to customer in Cardknox
-      const cardData: Record<string, string> = {
-        xKey: transactionKey,
-        xVersion: "5.0.0",
-        xSoftwareName: "ShulGenius",
-        xSoftwareVersion: "1.0.0",
-        xCommand: "customer:save",
-        xCustomerID: memberId,
-        xTokenType: "cc",
+      // Add payment method to customer
+      const paymentMethodData: Record<string, unknown> = {
+        CustomerId: cardknoxCustomerId,
+        Token: cardToken,
+        TokenType: "cc",
+        SetAsDefault: isDefault || false,
       };
 
-      // Use token if provided, otherwise use card number
-      if (cardToken) {
-        cardData.xToken = cardToken;
-      } else if (cardNumber) {
-        cardData.xCardNum = cardNumber;
-        if (cardCvc) {
-          cardData.xCVV = cardCvc;
-        }
-      }
-
       if (cardExp) {
-        cardData.xExp = cardExp;
+        paymentMethodData.Exp = cardExp;
       }
 
       if (zipCode) {
-        cardData.xBillZip = zipCode;
+        paymentMethodData.Zip = zipCode;
       }
 
-      console.log("Sending save card request:", JSON.stringify({ ...cardData, xKey: "[REDACTED]", xCardNum: "[REDACTED]", xCVV: "[REDACTED]" }));
+      console.log("Creating payment method:", JSON.stringify({ ...paymentMethodData, Token: "[REDACTED]" }));
 
-      const response = await fetch("https://x1.cardknox.com/gatewayjson", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(cardData),
-      });
+      const result = await callCardknoxAPI("/CreatePaymentMethod", paymentMethodData);
+      console.log("Cardknox payment method response:", result);
 
-      const result = await response.json();
-      console.log("Cardknox save card response:", result);
-
-      if (result.xResult !== "A") {
+      if (result.Result !== "S") {
         return new Response(
-          JSON.stringify({ error: result.xError || "Failed to save card in Cardknox" }),
+          JSON.stringify({ error: result.Error || "Failed to save card in Cardknox" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -289,11 +249,11 @@ serve(async (req) => {
         .insert({
           member_id: memberId,
           processor: processorType,
-          processor_id: processorId || null, // Save the processor ID for routing
-          processor_payment_method_id: result.xToken || cardToken || result.xMaskedCardNumber,
-          processor_customer_id: memberId,
-          card_brand: result.xCardType || "Unknown",
-          card_last_four: result.xMaskedCardNumber?.slice(-4) || cardNumber?.slice(-4) || "****",
+          processor_id: processorId || null,
+          processor_payment_method_id: result.PaymentMethodId || cardToken,
+          processor_customer_id: cardknoxCustomerId,
+          card_brand: result.CardType || "Unknown",
+          card_last_four: result.MaskedCardNumber?.slice(-4) || "****",
           exp_month: cardExp ? parseInt(cardExp.slice(0, 2)) : null,
           exp_year: cardExp ? 2000 + parseInt(cardExp.slice(2, 4)) : null,
           is_default: isDefault || false,
@@ -301,16 +261,15 @@ serve(async (req) => {
 
       if (pmError) {
         console.error("Error saving payment method:", pmError);
-        // Don't fail the request, card is already saved in Cardknox
       }
 
       return new Response(
         JSON.stringify({
           success: true,
           message: "Card saved successfully",
-          paymentMethodId: result.xToken || cardToken,
-          cardBrand: result.xCardType,
-          lastFour: result.xMaskedCardNumber?.slice(-4) || cardNumber?.slice(-4),
+          paymentMethodId: result.PaymentMethodId,
+          cardBrand: result.CardType,
+          lastFour: result.MaskedCardNumber?.slice(-4),
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
