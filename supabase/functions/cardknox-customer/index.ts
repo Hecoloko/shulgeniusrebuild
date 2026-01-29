@@ -160,27 +160,36 @@ serve(async (req) => {
       cardCvc?: string;
       zipCode?: string;
     }): Promise<{ token: string } | { error: string }> {
-      // Cardknox gateway expects xKey + command; exact field set varies by account.
-      // We use cc:save with TokenOnly to obtain a reusable token without charging.
-      const form = new URLSearchParams();
-      form.set("xKey", transactionKey!);
-      form.set("xCommand", "cc:save");
-      form.set("xCardNum", input.cardNumber);
-      if (input.cardExp) form.set("xExp", input.cardExp);
-      if (input.cardCvc) form.set("xCVV", input.cardCvc);
-      if (input.zipCode) form.set("xZip", input.zipCode);
-      form.set("xTokenOnly", "true");
+      // Cardknox gatewayjson expects JSON. We use cc:save with xTokenOnly=true to obtain a token
+      // without charging. (Exact field set varies by account; this is the standard pattern.)
+      const payload: Record<string, unknown> = {
+        xKey: transactionKey!,
+        xCommand: "cc:save",
+        xCardNum: input.cardNumber,
+        xTokenOnly: "true",
+      };
+
+      if (input.cardExp) payload.xExp = input.cardExp;
+      if (input.cardCvc) payload.xCVV = input.cardCvc;
+      if (input.zipCode) payload.xZip = input.zipCode;
 
       const resp = await fetch(CARDKNOX_GATEWAY_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: form,
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: JSON.stringify(payload),
       });
 
-      const data = await resp.json().catch(async () => {
-        const text = await resp.text();
-        return { _raw: text };
-      });
+      // Gateway sometimes returns JSON, sometimes text; always consume the body.
+      const rawText = await resp.text();
+      let data: any = null;
+      try {
+        data = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        data = { _raw: rawText };
+      }
 
       const token = (data?.xToken ?? data?.Token ?? data?.token) as string | undefined;
       const result = (data?.xResult ?? data?.Result ?? data?.result) as string | undefined;
@@ -190,6 +199,12 @@ serve(async (req) => {
       const err =
         (data?.xError ?? data?.Error ?? data?.error ?? data?._raw) ||
         `Failed to tokenize card${result ? ` (result=${result})` : ""}`;
+
+      console.log("Cardknox gateway tokenization failed", {
+        status: resp.status,
+        result,
+        error: err,
+      });
       return { error: String(err) };
     }
 
