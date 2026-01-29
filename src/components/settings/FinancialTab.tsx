@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { 
-  CreditCard, Plus, Play, Clock, Trash2, Edit, Zap, 
-  Loader2, DollarSign, Package, RefreshCw, Check, X
+  CreditCard, Plus, Trash2, Zap, 
+  Loader2, Package, Check, Edit2
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,6 +23,22 @@ type ProcessorType = "stripe" | "cardknox";
 type ItemType = "subscription" | "one_time";
 type BillingInterval = "weekly" | "monthly" | "quarterly" | "yearly";
 
+interface PaymentProcessor {
+  id: string;
+  organization_id: string;
+  name: string;
+  processor_type: ProcessorType;
+  is_default: boolean;
+  credentials: {
+    ifields_key?: string;
+    transaction_key?: string;
+    account_id?: string;
+    publishable_key?: string;
+  };
+  is_active: boolean;
+  created_at: string;
+}
+
 export function FinancialTab() {
   const { orgId, isLoading: orgLoading, noOrgExists } = useCurrentOrg();
   const queryClient = useQueryClient();
@@ -30,11 +46,15 @@ export function FinancialTab() {
   // Dialog states
   const [processorOpen, setProcessorOpen] = useState(false);
   const [itemOpen, setItemOpen] = useState(false);
+  const [deleteProcessorOpen, setDeleteProcessorOpen] = useState(false);
   const [deleteItemOpen, setDeleteItemOpen] = useState(false);
+  const [selectedProcessor, setSelectedProcessor] = useState<PaymentProcessor | null>(null);
   const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [editMode, setEditMode] = useState(false);
 
   // Processor form
-  const [processorType, setProcessorType] = useState<ProcessorType>("stripe");
+  const [processorName, setProcessorName] = useState("");
+  const [processorType, setProcessorType] = useState<ProcessorType>("cardknox");
   const [stripeAccountId, setStripeAccountId] = useState("");
   const [stripePublishableKey, setStripePublishableKey] = useState("");
   const [cardknoxIfieldsKey, setCardknoxIfieldsKey] = useState("");
@@ -47,18 +67,19 @@ export function FinancialTab() {
   const [itemType, setItemType] = useState<ItemType>("one_time");
   const [itemInterval, setItemInterval] = useState<BillingInterval>("monthly");
 
-  // Fetch organization settings
-  const { data: settings, isLoading: settingsLoading } = useQuery({
-    queryKey: ["org-settings", orgId],
+  // Fetch payment processors
+  const { data: processors, isLoading: processorsLoading } = useQuery({
+    queryKey: ["payment-processors", orgId],
     queryFn: async () => {
-      if (!orgId) return null;
+      if (!orgId) return [];
       const { data, error } = await supabase
-        .from("organization_settings")
+        .from("payment_processors")
         .select("*")
         .eq("organization_id", orgId)
-        .maybeSingle();
+        .eq("is_active", true)
+        .order("created_at", { ascending: true });
       if (error) throw error;
-      return data;
+      return (data || []) as PaymentProcessor[];
     },
     enabled: !!orgId,
   });
@@ -79,60 +100,52 @@ export function FinancialTab() {
     enabled: !!orgId,
   });
 
-  // Build processors list
-  const processors = [];
-  if (settings?.stripe_account_id) {
-    processors.push({
-      id: "stripe",
-      name: "Stripe",
-      type: "Stripe",
-      accountId: settings.stripe_account_id,
-      isActive: settings.active_processor === "stripe"
-    });
-  }
-  if (settings?.cardknox_ifields_key) {
-    processors.push({
-      id: "cardknox",
-      name: "Cardknox",
-      type: "Cardknox",
-      accountId: settings.cardknox_ifields_key,
-      isActive: settings.active_processor === "cardknox"
-    });
-  }
-
   // Add/Update processor mutation
   const processorMutation = useMutation({
     mutationFn: async () => {
       if (!orgId) throw new Error("No organization");
+      if (!processorName.trim()) throw new Error("Processor name required");
 
-      const updateData: any = {};
+      const credentials: Record<string, string> = {};
       if (processorType === "stripe") {
-        if (!stripeAccountId) throw new Error("Stripe Account ID required");
-        updateData.stripe_account_id = stripeAccountId;
-        updateData.stripe_publishable_key = stripePublishableKey;
+        if (!stripeAccountId && !stripePublishableKey) throw new Error("At least one Stripe credential required");
+        if (stripeAccountId) credentials.account_id = stripeAccountId;
+        if (stripePublishableKey) credentials.publishable_key = stripePublishableKey;
       } else {
-        if (!cardknoxIfieldsKey || !cardknoxTransactionKey) throw new Error("Cardknox credentials required");
-        updateData.cardknox_ifields_key = cardknoxIfieldsKey;
-        updateData.cardknox_transaction_key = cardknoxTransactionKey;
+        if (!cardknoxIfieldsKey || !cardknoxTransactionKey) throw new Error("Both Cardknox keys required");
+        credentials.ifields_key = cardknoxIfieldsKey;
+        credentials.transaction_key = cardknoxTransactionKey;
       }
 
-      // Check if settings exist
-      if (settings) {
+      // Check if this is the first processor (make it default)
+      const isFirst = !processors || processors.length === 0;
+
+      if (editMode && selectedProcessor) {
         const { error } = await supabase
-          .from("organization_settings")
-          .update(updateData)
-          .eq("organization_id", orgId);
+          .from("payment_processors")
+          .update({
+            name: processorName.trim(),
+            processor_type: processorType,
+            credentials,
+          })
+          .eq("id", selectedProcessor.id);
         if (error) throw error;
       } else {
         const { error } = await supabase
-          .from("organization_settings")
-          .insert({ organization_id: orgId, ...updateData });
+          .from("payment_processors")
+          .insert({
+            organization_id: orgId,
+            name: processorName.trim(),
+            processor_type: processorType,
+            credentials,
+            is_default: isFirst,
+          });
         if (error) throw error;
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["org-settings", orgId] });
-      toast.success(`${processorType === "stripe" ? "Stripe" : "Cardknox"} connected successfully`);
+      queryClient.invalidateQueries({ queryKey: ["payment-processors", orgId] });
+      toast.success(editMode ? "Processor updated" : "Processor added successfully");
       setProcessorOpen(false);
       resetProcessorForm();
     },
@@ -143,17 +156,45 @@ export function FinancialTab() {
 
   // Set default processor mutation
   const setDefaultMutation = useMutation({
-    mutationFn: async (processor: ProcessorType) => {
+    mutationFn: async (processorId: string) => {
       if (!orgId) throw new Error("No organization");
-      const { error } = await supabase
-        .from("organization_settings")
-        .update({ active_processor: processor })
+      
+      // First, unset all defaults for this org
+      await supabase
+        .from("payment_processors")
+        .update({ is_default: false })
         .eq("organization_id", orgId);
+
+      // Then set the new default
+      const { error } = await supabase
+        .from("payment_processors")
+        .update({ is_default: true })
+        .eq("id", processorId);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["org-settings", orgId] });
+      queryClient.invalidateQueries({ queryKey: ["payment-processors", orgId] });
       toast.success("Default processor updated");
+    },
+    onError: (err: Error) => {
+      toast.error("Failed: " + err.message);
+    },
+  });
+
+  // Delete processor mutation
+  const deleteProcessorMutation = useMutation({
+    mutationFn: async (processorId: string) => {
+      const { error } = await supabase
+        .from("payment_processors")
+        .update({ is_active: false })
+        .eq("id", processorId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["payment-processors", orgId] });
+      toast.success("Processor removed");
+      setDeleteProcessorOpen(false);
+      setSelectedProcessor(null);
     },
     onError: (err: Error) => {
       toast.error("Failed: " + err.message);
@@ -210,11 +251,29 @@ export function FinancialTab() {
   });
 
   const resetProcessorForm = () => {
+    setProcessorName("");
     setStripeAccountId("");
     setStripePublishableKey("");
     setCardknoxIfieldsKey("");
     setCardknoxTransactionKey("");
-    setProcessorType("stripe");
+    setProcessorType("cardknox");
+    setEditMode(false);
+    setSelectedProcessor(null);
+  };
+
+  const openEditProcessor = (processor: PaymentProcessor) => {
+    setSelectedProcessor(processor);
+    setEditMode(true);
+    setProcessorName(processor.name);
+    setProcessorType(processor.processor_type);
+    if (processor.processor_type === "stripe") {
+      setStripeAccountId(processor.credentials.account_id || "");
+      setStripePublishableKey(processor.credentials.publishable_key || "");
+    } else {
+      setCardknoxIfieldsKey(processor.credentials.ifields_key || "");
+      setCardknoxTransactionKey(processor.credentials.transaction_key || "");
+    }
+    setProcessorOpen(true);
   };
 
   const resetItemForm = () => {
@@ -232,7 +291,7 @@ export function FinancialTab() {
     }).format(amount);
   };
 
-  const isLoading = orgLoading || settingsLoading || itemsLoading;
+  const isLoading = orgLoading || processorsLoading || itemsLoading;
 
   if (isLoading) {
     return (
@@ -273,12 +332,15 @@ export function FinancialTab() {
               Payment Processors
             </CardTitle>
             <CardDescription>
-              Connect payment gateways and select your default processor
+              Connect multiple payment gateways and select your default
             </CardDescription>
           </div>
 
           {/* Add Processor Dialog */}
-          <Dialog open={processorOpen} onOpenChange={setProcessorOpen}>
+          <Dialog open={processorOpen} onOpenChange={(open) => {
+            setProcessorOpen(open);
+            if (!open) resetProcessorForm();
+          }}>
             <DialogTrigger asChild>
               <Button className="btn-royal" size="sm">
                 <Plus className="h-4 w-4 mr-2" />
@@ -287,63 +349,87 @@ export function FinancialTab() {
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Connect Payment Processor</DialogTitle>
+                <DialogTitle>{editMode ? "Edit" : "Add"} Payment Processor</DialogTitle>
                 <DialogDescription>
-                  Add your payment gateway credentials
+                  {editMode ? "Update processor credentials" : "Connect a new payment gateway"}
                 </DialogDescription>
               </DialogHeader>
 
-              <Tabs value={processorType} onValueChange={(v) => setProcessorType(v as ProcessorType)}>
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="stripe">Stripe</TabsTrigger>
-                  <TabsTrigger value="cardknox">Cardknox</TabsTrigger>
-                </TabsList>
+              <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                  <Label htmlFor="processor-name">Name *</Label>
+                  <Input
+                    id="processor-name"
+                    placeholder="e.g., Primary Cardknox, Stripe Live"
+                    value={processorName}
+                    onChange={(e) => setProcessorName(e.target.value)}
+                  />
+                </div>
 
-                <TabsContent value="stripe" className="space-y-4 pt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="stripe-account">Account ID *</Label>
-                    <Input
-                      id="stripe-account"
-                      placeholder="acct_..."
-                      value={stripeAccountId}
-                      onChange={(e) => setStripeAccountId(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="stripe-key">Publishable Key</Label>
-                    <Input
-                      id="stripe-key"
-                      placeholder="pk_live_..."
-                      value={stripePublishableKey}
-                      onChange={(e) => setStripePublishableKey(e.target.value)}
-                    />
-                  </div>
-                </TabsContent>
+                <div className="space-y-2">
+                  <Label>Processor Type</Label>
+                  <Select 
+                    value={processorType} 
+                    onValueChange={(v) => setProcessorType(v as ProcessorType)}
+                    disabled={editMode}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cardknox">Cardknox</SelectItem>
+                      <SelectItem value="stripe">Stripe</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-                <TabsContent value="cardknox" className="space-y-4 pt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="cardknox-transaction">Transaction Key *</Label>
-                    <Input
-                      id="cardknox-transaction"
-                      type="password"
-                      placeholder="Your Cardknox Transaction Key"
-                      value={cardknoxTransactionKey}
-                      onChange={(e) => setCardknoxTransactionKey(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">Found in Cardknox Portal → Account → Keys</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="cardknox-ifields">iFields Key *</Label>
-                    <Input
-                      id="cardknox-ifields"
-                      placeholder="Your Cardknox iFields Key"
-                      value={cardknoxIfieldsKey}
-                      onChange={(e) => setCardknoxIfieldsKey(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">Used for secure card tokenization</p>
-                  </div>
-                </TabsContent>
-              </Tabs>
+                {processorType === "stripe" ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="stripe-account">Account ID</Label>
+                      <Input
+                        id="stripe-account"
+                        placeholder="acct_..."
+                        value={stripeAccountId}
+                        onChange={(e) => setStripeAccountId(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="stripe-key">Publishable Key</Label>
+                      <Input
+                        id="stripe-key"
+                        placeholder="pk_live_..."
+                        value={stripePublishableKey}
+                        onChange={(e) => setStripePublishableKey(e.target.value)}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="cardknox-transaction">Transaction Key *</Label>
+                      <Input
+                        id="cardknox-transaction"
+                        type="password"
+                        placeholder="Your Cardknox Transaction Key"
+                        value={cardknoxTransactionKey}
+                        onChange={(e) => setCardknoxTransactionKey(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">Found in Cardknox Portal → Account → Keys</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="cardknox-ifields">iFields Key *</Label>
+                      <Input
+                        id="cardknox-ifields"
+                        placeholder="Your Cardknox iFields Key"
+                        value={cardknoxIfieldsKey}
+                        onChange={(e) => setCardknoxIfieldsKey(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">Used for secure card tokenization</p>
+                    </div>
+                  </>
+                )}
+              </div>
 
               <DialogFooter>
                 <Button variant="outline" onClick={() => setProcessorOpen(false)}>
@@ -355,7 +441,7 @@ export function FinancialTab() {
                   disabled={processorMutation.isPending}
                 >
                   {processorMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Connect
+                  {editMode ? "Update" : "Add Processor"}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -363,7 +449,7 @@ export function FinancialTab() {
         </CardHeader>
 
         <CardContent>
-          {processors.length === 0 ? (
+          {!processors || processors.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <CreditCard className="h-10 w-10 mx-auto mb-3 opacity-30" />
               <p>No payment processors configured</p>
@@ -373,8 +459,8 @@ export function FinancialTab() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Processor</TableHead>
-                  <TableHead>Account ID</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -384,34 +470,54 @@ export function FinancialTab() {
                   <TableRow key={processor.id}>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
-                        {processor.isActive && <Zap className="h-4 w-4 text-gold" />}
+                        {processor.is_default && <Zap className="h-4 w-4 text-gold" />}
                         {processor.name}
                       </div>
                     </TableCell>
-                    <TableCell className="font-mono text-sm text-muted-foreground">
-                      {processor.accountId.slice(0, 15)}...
+                    <TableCell>
+                      <span className="capitalize">{processor.processor_type}</span>
                     </TableCell>
                     <TableCell>
                       <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                        processor.isActive 
+                        processor.is_default 
                           ? "bg-success/10 text-success" 
                           : "bg-muted text-muted-foreground"
                       }`}>
-                        {processor.isActive ? "Default" : "Connected"}
+                        {processor.is_default ? "Default" : "Connected"}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      {!processor.isActive && (
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => setDefaultMutation.mutate(processor.id as ProcessorType)}
-                          disabled={setDefaultMutation.isPending}
+                      <div className="flex items-center justify-end gap-1">
+                        {!processor.is_default && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => setDefaultMutation.mutate(processor.id)}
+                            disabled={setDefaultMutation.isPending}
+                          >
+                            <Check className="h-4 w-4 mr-1" />
+                            Set Default
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEditProcessor(processor)}
                         >
-                          <Check className="h-4 w-4 mr-1" />
-                          Set Default
+                          <Edit2 className="h-4 w-4" />
                         </Button>
-                      )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => {
+                            setSelectedProcessor(processor);
+                            setDeleteProcessorOpen(true);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -420,6 +526,29 @@ export function FinancialTab() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Processor Dialog */}
+      <AlertDialog open={deleteProcessorOpen} onOpenChange={setDeleteProcessorOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Payment Processor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove "{selectedProcessor?.name}" from your organization. 
+              Existing transactions will not be affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => selectedProcessor && deleteProcessorMutation.mutate(selectedProcessor.id)}
+            >
+              {deleteProcessorMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Billing Items */}
       <Card className="premium-card">
@@ -465,7 +594,7 @@ export function FinancialTab() {
                   <Label htmlFor="item-desc">Description</Label>
                   <Input
                     id="item-desc"
-                    placeholder="Annual family membership"
+                    placeholder="Optional description"
                     value={itemDescription}
                     onChange={(e) => setItemDescription(e.target.value)}
                   />
@@ -474,20 +603,15 @@ export function FinancialTab() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="item-amount">Amount *</Label>
-                    <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="item-amount"
-                        type="number"
-                        step="0.01"
-                        placeholder="100.00"
-                        className="pl-9"
-                        value={itemAmount}
-                        onChange={(e) => setItemAmount(e.target.value)}
-                      />
-                    </div>
+                    <Input
+                      id="item-amount"
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={itemAmount}
+                      onChange={(e) => setItemAmount(e.target.value)}
+                    />
                   </div>
-
                   <div className="space-y-2">
                     <Label>Type</Label>
                     <Select value={itemType} onValueChange={(v) => setItemType(v as ItemType)}>
@@ -495,7 +619,7 @@ export function FinancialTab() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="one_time">One-time</SelectItem>
+                        <SelectItem value="one_time">One-Time</SelectItem>
                         <SelectItem value="subscription">Subscription</SelectItem>
                       </SelectContent>
                     </Select>
@@ -527,7 +651,7 @@ export function FinancialTab() {
                 <Button 
                   className="btn-gold"
                   onClick={() => addItemMutation.mutate()}
-                  disabled={addItemMutation.isPending || !itemName || !itemAmount}
+                  disabled={addItemMutation.isPending}
                 >
                   {addItemMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   Create Item
@@ -538,7 +662,7 @@ export function FinancialTab() {
         </CardHeader>
 
         <CardContent>
-          {!billingItems?.length ? (
+          {!billingItems || billingItems.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Package className="h-10 w-10 mx-auto mb-3 opacity-30" />
               <p>No billing items created</p>
@@ -551,46 +675,39 @@ export function FinancialTab() {
                   <TableHead>Name</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Amount</TableHead>
-                  <TableHead>Interval</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {billingItems.map((item) => (
                   <TableRow key={item.id}>
-                    <TableCell>
+                    <TableCell className="font-medium">
                       <div>
-                        <p className="font-medium">{item.name}</p>
+                        <p>{item.name}</p>
                         {item.description && (
-                          <p className="text-xs text-muted-foreground">{item.description}</p>
+                          <p className="text-sm text-muted-foreground">{item.description}</p>
                         )}
                       </div>
                     </TableCell>
                     <TableCell>
                       <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                        item.type === "subscription" 
-                          ? "bg-primary/10 text-primary" 
+                        item.type === "subscription"
+                          ? "bg-primary/10 text-primary"
                           : "bg-muted text-muted-foreground"
                       }`}>
-                        {item.type === "subscription" ? (
-                          <span className="flex items-center gap-1">
-                            <RefreshCw className="h-3 w-3" />
-                            Recurring
-                          </span>
-                        ) : "One-time"}
+                        {item.type === "subscription" 
+                          ? `${item.billing_interval}` 
+                          : "One-time"}
                       </span>
                     </TableCell>
-                    <TableCell className="font-medium">
+                    <TableCell className="font-mono">
                       {formatCurrency(item.amount)}
                     </TableCell>
-                    <TableCell className="text-muted-foreground capitalize">
-                      {item.billing_interval || "—"}
-                    </TableCell>
                     <TableCell className="text-right">
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8 text-destructive hover:text-destructive"
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive hover:text-destructive"
                         onClick={() => {
                           setSelectedItem(item);
                           setDeleteItemOpen(true);
@@ -607,36 +724,13 @@ export function FinancialTab() {
         </CardContent>
       </Card>
 
-      {/* Recurring Billing Info */}
-      <Card className="premium-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5" />
-            Automated Billing
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/30">
-            <Clock className="h-5 w-5 text-muted-foreground" />
-            <div>
-              <p className="font-medium">Automated Schedule</p>
-              <p className="text-sm text-muted-foreground">
-                Recurring billing runs automatically every day at 2:00 AM UTC. 
-                The system processes all active subscriptions with due dates of today or earlier.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Delete Item Confirmation */}
+      {/* Delete Item Dialog */}
       <AlertDialog open={deleteItemOpen} onOpenChange={setDeleteItemOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Billing Item</AlertDialogTitle>
+            <AlertDialogTitle>Delete Billing Item?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete <strong>{selectedItem?.name}</strong>? 
-              This cannot be undone.
+              This will permanently delete "{selectedItem?.name}". This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
