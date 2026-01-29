@@ -111,6 +111,45 @@ export type Database = {
           },
         ]
       }
+      campaign_processors: {
+        Row: {
+          campaign_id: string
+          created_at: string
+          id: string
+          is_primary: boolean
+          processor_id: string
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          processor_id: string
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          processor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_processors_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_processors_processor_id_fkey"
+            columns: ["processor_id"]
+            isOneToOne: false
+            referencedRelation: "payment_processors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaigns: {
         Row: {
           created_at: string
