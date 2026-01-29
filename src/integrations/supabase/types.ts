@@ -726,6 +726,98 @@ export type Database = {
         }
         Relationships: []
       }
+      subscriptions: {
+        Row: {
+          billing_method: string
+          campaign_id: string | null
+          created_at: string
+          end_date: string | null
+          frequency: string
+          id: string
+          installments_paid: number | null
+          installments_total: number | null
+          is_active: boolean
+          member_id: string
+          next_billing_date: string
+          notes: string | null
+          organization_id: string
+          payment_method_id: string | null
+          payment_type: string
+          start_date: string
+          total_amount: number
+          updated_at: string
+        }
+        Insert: {
+          billing_method?: string
+          campaign_id?: string | null
+          created_at?: string
+          end_date?: string | null
+          frequency?: string
+          id?: string
+          installments_paid?: number | null
+          installments_total?: number | null
+          is_active?: boolean
+          member_id: string
+          next_billing_date?: string
+          notes?: string | null
+          organization_id: string
+          payment_method_id?: string | null
+          payment_type?: string
+          start_date?: string
+          total_amount: number
+          updated_at?: string
+        }
+        Update: {
+          billing_method?: string
+          campaign_id?: string | null
+          created_at?: string
+          end_date?: string | null
+          frequency?: string
+          id?: string
+          installments_paid?: number | null
+          installments_total?: number | null
+          is_active?: boolean
+          member_id?: string
+          next_billing_date?: string
+          notes?: string | null
+          organization_id?: string
+          payment_method_id?: string | null
+          payment_type?: string
+          start_date?: string
+          total_amount?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_payment_method_id_fkey"
+            columns: ["payment_method_id"]
+            isOneToOne: false
+            referencedRelation: "payment_methods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string

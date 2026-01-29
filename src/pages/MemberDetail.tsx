@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { AddCardModal } from "@/components/members/AddCardModal";
+import { AddSubscriptionModal } from "@/components/members/AddSubscriptionModal";
 
 export default function MemberDetail() {
   const { memberId } = useParams<{ memberId: string }>();
@@ -32,6 +33,7 @@ export default function MemberDetail() {
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
   const [addCardOpen, setAddCardOpen] = useState(false);
+  const [addSubscriptionOpen, setAddSubscriptionOpen] = useState(false);
 
   // Edit form state
   const [editFirstName, setEditFirstName] = useState("");
@@ -124,7 +126,22 @@ export default function MemberDetail() {
     enabled: !!memberId,
   });
 
-  // Fetch family members (members with same family_head_id or this member as family_head)
+  // Fetch subscriptions for this member
+  const { data: subscriptions } = useQuery({
+    queryKey: ["member-subscriptions", memberId],
+    queryFn: async () => {
+      if (!memberId) return [];
+      const { data, error } = await supabase
+        .from("subscriptions")
+        .select("*, campaigns(name)")
+        .eq("member_id", memberId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!memberId,
+  });
+
   const { data: familyMembers } = useQuery({
     queryKey: ["family-members", memberId, member?.family_head_id],
     queryFn: async () => {
@@ -675,21 +692,67 @@ export default function MemberDetail() {
             {/* Subscriptions Tab */}
             <TabsContent value="subscriptions" className="mt-6">
               <Card>
-                <CardHeader>
-                  <CardTitle>Subscriptions</CardTitle>
-                  <CardDescription>Recurring billing for this member</CardDescription>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>Subscriptions</CardTitle>
+                    <CardDescription>
+                      {subscriptions?.filter(s => s.is_active).length || 0} active subscription(s)
+                    </CardDescription>
+                  </div>
+                  <Button className="gap-2" onClick={() => setAddSubscriptionOpen(true)}>
+                    <Plus className="h-4 w-4" />
+                    Add Subscription
+                  </Button>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Calendar className="h-12 w-12 mx-auto mb-4 opacity-30" />
-                    <p>No active subscriptions</p>
-                    <Button className="mt-4 gap-2">
-                      <Plus className="h-4 w-4" />
-                      Add Subscription
-                    </Button>
-                  </div>
+                  {subscriptions && subscriptions.length > 0 ? (
+                    <div className="space-y-3">
+                      {subscriptions.map((sub) => (
+                        <div
+                          key={sub.id}
+                          className="flex items-center justify-between p-4 border rounded-lg"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                              <Calendar className="h-5 w-5 text-primary" />
+                            </div>
+                            <div>
+                              <p className="font-medium">
+                                {(sub.campaigns as { name: string } | null)?.name || "General"}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {formatCurrency(Number(sub.total_amount))} • {sub.frequency.replace("_", " ")}
+                                {sub.payment_type === "installments" && 
+                                  ` • ${sub.installments_paid}/${sub.installments_total} paid`}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={sub.billing_method === "auto_cc" ? "default" : "secondary"}>
+                              {sub.billing_method === "auto_cc" ? "Auto CC" : "Invoiced"}
+                            </Badge>
+                            <Badge variant={sub.is_active ? "default" : "destructive"}>
+                              {sub.is_active ? "Active" : "Inactive"}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Calendar className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                      <p>No active subscriptions</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
+
+              {/* Add Subscription Modal */}
+              <AddSubscriptionModal
+                member={member}
+                open={addSubscriptionOpen}
+                onOpenChange={setAddSubscriptionOpen}
+              />
             </TabsContent>
 
             {/* Cards Tab */}
