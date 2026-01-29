@@ -8,7 +8,7 @@ import { motion } from "framer-motion";
 import {
   ArrowLeft, LayoutDashboard, LogOut, Mail, Phone, MapPin,
   DollarSign, FileText, CreditCard, Users, Calendar, Receipt,
-  Pencil, Plus, Loader2, Building2
+  Pencil, Plus, Loader2, Building2, Trash2, Zap
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,6 +35,13 @@ export default function MemberDetail() {
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
   const [addCardOpen, setAddCardOpen] = useState(false);
   const [addSubscriptionOpen, setAddSubscriptionOpen] = useState(false);
+  const [processingSubscriptionId, setProcessingSubscriptionId] = useState<string | null>(null);
+  const [deletingSubscription, setDeletingSubscription] = useState<{
+    id: string;
+    campaignName: string;
+    amount: number;
+    frequency: string;
+  } | null>(null);
 
   // Edit form state
   const [editFirstName, setEditFirstName] = useState("");
@@ -224,6 +232,62 @@ export default function MemberDetail() {
     },
     onError: (err: Error) => {
       toast.error("Failed to record payment: " + err.message);
+    },
+  });
+
+  // Test billing mutation - process a subscription payment
+  const testBillingMutation = useMutation({
+    mutationFn: async (subscription: {
+      id: string;
+      total_amount: number;
+      campaigns: { name: string } | null;
+    }) => {
+      if (!memberId || !orgId) throw new Error("Missing data");
+
+      const { data, error } = await supabase.functions.invoke("process-payment", {
+        body: {
+          subscriptionId: subscription.id,
+          memberId: memberId,
+          organizationId: orgId,
+          amount: Number(subscription.total_amount),
+          description: `${subscription.campaigns?.name || "Subscription"} - Test billing`,
+        },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["member-subscriptions", memberId] });
+      queryClient.invalidateQueries({ queryKey: ["member-invoices", memberId] });
+      queryClient.invalidateQueries({ queryKey: ["member-payments", memberId] });
+      queryClient.invalidateQueries({ queryKey: ["member-detail", memberId] });
+      toast.success(`Payment processed successfully! Transaction ID: ${data.transactionId}`);
+      setProcessingSubscriptionId(null);
+    },
+    onError: (err: Error) => {
+      toast.error("Payment failed: " + err.message);
+      setProcessingSubscriptionId(null);
+    },
+  });
+
+  // Delete subscription mutation
+  const deleteSubscriptionMutation = useMutation({
+    mutationFn: async (subscriptionId: string) => {
+      const { error } = await supabase
+        .from("subscriptions")
+        .delete()
+        .eq("id", subscriptionId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["member-subscriptions", memberId] });
+      toast.success("Subscription deleted successfully");
+      setDeletingSubscription(null);
+    },
+    onError: (err: Error) => {
+      toast.error("Failed to delete subscription: " + err.message);
     },
   });
 
@@ -707,36 +771,121 @@ export default function MemberDetail() {
                 <CardContent>
                   {subscriptions && subscriptions.length > 0 ? (
                     <div className="space-y-3">
-                      {subscriptions.map((sub) => (
-                        <div
-                          key={sub.id}
-                          className="flex items-center justify-between p-4 border rounded-lg"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                              <Calendar className="h-5 w-5 text-primary" />
+                      {subscriptions.map((sub) => {
+                        const campaignName = (sub.campaigns as { name: string } | null)?.name || "General";
+                        const canTestBilling = sub.billing_method === "auto_cc" && sub.payment_method_id && sub.is_active;
+                        const isProcessing = processingSubscriptionId === sub.id;
+
+                        return (
+                          <div
+                            key={sub.id}
+                            className="flex items-center justify-between p-4 border rounded-lg"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                                <Calendar className="h-5 w-5 text-primary" />
+                              </div>
+                              <div>
+                                <p className="font-medium">{campaignName}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {formatCurrency(Number(sub.total_amount))} • {sub.frequency.replace("_", " ")}
+                                  {sub.payment_type === "installments" && 
+                                    ` • ${sub.installments_paid}/${sub.installments_total} paid`}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-medium">
-                                {(sub.campaigns as { name: string } | null)?.name || "General"}
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                {formatCurrency(Number(sub.total_amount))} • {sub.frequency.replace("_", " ")}
-                                {sub.payment_type === "installments" && 
-                                  ` • ${sub.installments_paid}/${sub.installments_total} paid`}
-                              </p>
+                            <div className="flex items-center gap-2">
+                              {/* Test Billing Button - only for Auto CC with linked payment method */}
+                              {canTestBilling && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="gap-1"
+                                  disabled={isProcessing || testBillingMutation.isPending}
+                                  onClick={() => {
+                                    setProcessingSubscriptionId(sub.id);
+                                    testBillingMutation.mutate({
+                                      id: sub.id,
+                                      total_amount: sub.total_amount,
+                                      campaigns: sub.campaigns as { name: string } | null,
+                                    });
+                                  }}
+                                >
+                                  {isProcessing ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Zap className="h-3 w-3" />
+                                  )}
+                                  Test Billing
+                                </Button>
+                              )}
+
+                              {/* Delete Button with Confirmation */}
+                              <AlertDialog 
+                                open={deletingSubscription?.id === sub.id}
+                                onOpenChange={(open) => !open && setDeletingSubscription(null)}
+                              >
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    onClick={() => setDeletingSubscription({
+                                      id: sub.id,
+                                      campaignName,
+                                      amount: Number(sub.total_amount),
+                                      frequency: sub.frequency,
+                                    })}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete Subscription</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Are you sure you want to delete this subscription?
+                                      <div className="mt-4 p-3 bg-muted rounded-lg">
+                                        <p className="font-medium">{deletingSubscription?.campaignName}</p>
+                                        <p className="text-sm text-muted-foreground">
+                                          {deletingSubscription && formatCurrency(deletingSubscription.amount)} / {deletingSubscription?.frequency.replace("_", " ")}
+                                        </p>
+                                      </div>
+                                      <p className="mt-4 text-destructive font-medium">
+                                        This action cannot be undone.
+                                      </p>
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                      onClick={() => {
+                                        if (deletingSubscription) {
+                                          deleteSubscriptionMutation.mutate(deletingSubscription.id);
+                                        }
+                                      }}
+                                      disabled={deleteSubscriptionMutation.isPending}
+                                    >
+                                      {deleteSubscriptionMutation.isPending && (
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                      )}
+                                      Delete
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+
+                              <Badge variant={sub.billing_method === "auto_cc" ? "default" : "secondary"}>
+                                {sub.billing_method === "auto_cc" ? "Auto CC" : "Invoiced"}
+                              </Badge>
+                              <Badge variant={sub.is_active ? "default" : "destructive"}>
+                                {sub.is_active ? "Active" : "Inactive"}
+                              </Badge>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant={sub.billing_method === "auto_cc" ? "default" : "secondary"}>
-                              {sub.billing_method === "auto_cc" ? "Auto CC" : "Invoiced"}
-                            </Badge>
-                            <Badge variant={sub.is_active ? "default" : "destructive"}>
-                              {sub.is_active ? "Active" : "Inactive"}
-                            </Badge>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="text-center py-8 text-muted-foreground">

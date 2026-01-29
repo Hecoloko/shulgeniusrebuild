@@ -313,6 +313,7 @@ export type Database = {
       }
       invoices: {
         Row: {
+          campaign_id: string | null
           created_at: string
           due_date: string | null
           id: string
@@ -330,6 +331,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          campaign_id?: string | null
           created_at?: string
           due_date?: string | null
           id?: string
@@ -347,6 +349,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          campaign_id?: string | null
           created_at?: string
           due_date?: string | null
           id?: string
@@ -364,6 +367,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "invoices_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "invoices_member_id_fkey"
             columns: ["member_id"]
@@ -550,6 +560,7 @@ export type Database = {
           member_id: string
           processor: string
           processor_customer_id: string | null
+          processor_id: string | null
           processor_payment_method_id: string
         }
         Insert: {
@@ -563,6 +574,7 @@ export type Database = {
           member_id: string
           processor: string
           processor_customer_id?: string | null
+          processor_id?: string | null
           processor_payment_method_id: string
         }
         Update: {
@@ -576,6 +588,7 @@ export type Database = {
           member_id?: string
           processor?: string
           processor_customer_id?: string | null
+          processor_id?: string | null
           processor_payment_method_id?: string
         }
         Relationships: [
@@ -584,6 +597,13 @@ export type Database = {
             columns: ["member_id"]
             isOneToOne: false
             referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_methods_processor_id_fkey"
+            columns: ["processor_id"]
+            isOneToOne: false
+            referencedRelation: "payment_processors"
             referencedColumns: ["id"]
           },
         ]
