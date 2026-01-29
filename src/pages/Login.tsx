@@ -31,11 +31,37 @@ export default function Login() {
         description: error.message,
         variant: "destructive",
       });
+      setIsLoading(false);
+      return;
+    }
+
+    // Get user to check roles
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (user) {
+      // Check if user has admin/owner role
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id);
+      
+      const isAdmin = roles?.some(r => r.role === "shuladmin" || r.role === "shulowner");
+      
+      if (isAdmin) {
+        toast({
+          title: "Welcome back!",
+          description: "You've been signed in successfully.",
+        });
+        navigate("/");
+      } else {
+        // Member only - redirect to member portal
+        toast({
+          title: "Welcome!",
+          description: "Redirecting to member portal.",
+        });
+        navigate("/portal");
+      }
     } else {
-      toast({
-        title: "Welcome back!",
-        description: "You've been signed in successfully.",
-      });
       navigate("/");
     }
 
