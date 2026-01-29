@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Loader2, CreditCard, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { getProcessorIdsForCampaign } from "@/lib/payment-router";
 
 interface AddSubscriptionModalProps {
   member: {
@@ -34,6 +35,7 @@ export function AddSubscriptionModal({ member, open, onOpenChange }: AddSubscrip
   const [billingMethod, setBillingMethod] = useState<BillingMethod>("invoiced");
   const [frequency, setFrequency] = useState<Frequency>("monthly");
   const [installmentsTotal, setInstallmentsTotal] = useState("");
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string>("");
 
   // Fetch campaigns for this organization
   const { data: campaigns } = useQuery({
@@ -53,17 +55,47 @@ export function AddSubscriptionModal({ member, open, onOpenChange }: AddSubscrip
 
   // Fetch payment methods for this member (for auto_cc option)
   const { data: paymentMethods } = useQuery({
-    queryKey: ["member-payment-methods", member.id],
+    queryKey: ["member-payment-methods-with-processor", member.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("payment_methods")
-        .select("*")
+        .select("*, payment_processors(id, name)")
         .eq("member_id", member.id);
       if (error) throw error;
       return data || [];
     },
-    enabled: open && billingMethod === "auto_cc",
+    enabled: open,
   });
+
+  // Fetch campaign processors when a campaign is selected
+  const { data: campaignProcessorIds } = useQuery({
+    queryKey: ["campaign-processor-ids", campaignId],
+    queryFn: async () => {
+      if (!campaignId) return [];
+      return getProcessorIdsForCampaign(campaignId);
+    },
+    enabled: open && !!campaignId,
+  });
+
+  // Filter payment methods by campaign's processor(s)
+  const filteredPaymentMethods = useMemo(() => {
+    if (!paymentMethods) return [];
+    
+    // If no campaign selected or campaign has no specific processors, show all cards
+    if (!campaignId || !campaignProcessorIds || campaignProcessorIds.length === 0) {
+      return paymentMethods;
+    }
+
+    // Filter cards that match the campaign's processor(s)
+    return paymentMethods.filter((pm) => {
+      // If card has a processor_id, check if it matches campaign processors
+      if (pm.processor_id) {
+        return campaignProcessorIds.includes(pm.processor_id);
+      }
+      // Legacy cards without processor_id - show them (backwards compatible)
+      return true;
+    });
+  }, [paymentMethods, campaignProcessorIds, campaignId]);
 
   const createSubscriptionMutation = useMutation({
     mutationFn: async () => {
@@ -83,11 +115,19 @@ export function AddSubscriptionModal({ member, open, onOpenChange }: AddSubscrip
         }
       }
 
-      // Get default payment method if auto_cc is selected
+      // Get selected payment method if auto_cc is selected
       let paymentMethodId = null;
-      if (billingMethod === "auto_cc" && paymentMethods && paymentMethods.length > 0) {
-        const defaultMethod = paymentMethods.find(pm => pm.is_default) || paymentMethods[0];
-        paymentMethodId = defaultMethod.id;
+      if (billingMethod === "auto_cc") {
+        if (selectedPaymentMethodId) {
+          paymentMethodId = selectedPaymentMethodId;
+        } else if (filteredPaymentMethods.length > 0) {
+          const defaultMethod = filteredPaymentMethods.find(pm => pm.is_default) || filteredPaymentMethods[0];
+          paymentMethodId = defaultMethod.id;
+        }
+
+        if (!paymentMethodId) {
+          throw new Error("No payment method available for Auto CC billing");
+        }
       }
 
       const { error } = await supabase.from("subscriptions").insert({
@@ -122,6 +162,7 @@ export function AddSubscriptionModal({ member, open, onOpenChange }: AddSubscrip
     setBillingMethod("invoiced");
     setFrequency("monthly");
     setInstallmentsTotal("");
+    setSelectedPaymentMethodId("");
   };
 
   const handleClose = () => {
@@ -137,6 +178,8 @@ export function AddSubscriptionModal({ member, open, onOpenChange }: AddSubscrip
     return num;
   };
 
+  const noCardsForCampaign = billingMethod === "auto_cc" && campaignId && filteredPaymentMethods.length === 0;
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
@@ -151,7 +194,10 @@ export function AddSubscriptionModal({ member, open, onOpenChange }: AddSubscrip
           {/* Campaign Select */}
           <div className="space-y-2">
             <Label>Campaign *</Label>
-            <Select value={campaignId} onValueChange={setCampaignId}>
+            <Select value={campaignId} onValueChange={(value) => {
+              setCampaignId(value);
+              setSelectedPaymentMethodId(""); // Reset card selection when campaign changes
+            }}>
               <SelectTrigger>
                 <SelectValue placeholder="Select campaign" />
               </SelectTrigger>
@@ -245,6 +291,47 @@ export function AddSubscriptionModal({ member, open, onOpenChange }: AddSubscrip
             </p>
           </div>
 
+          {/* Payment Method Selector (only for Auto CC) */}
+          {billingMethod === "auto_cc" && (
+            <div className="space-y-2">
+              <Label>Select Card *</Label>
+              {noCardsForCampaign ? (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+                  <AlertCircle className="h-4 w-4" />
+                  <span>No cards available for this campaign's processor</span>
+                </div>
+              ) : filteredPaymentMethods.length > 0 ? (
+                <Select value={selectedPaymentMethodId} onValueChange={setSelectedPaymentMethodId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a card" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-background border z-50">
+                    {filteredPaymentMethods.map((pm) => {
+                      const processorName = (pm.payment_processors as { name: string } | null)?.name;
+                      return (
+                        <SelectItem key={pm.id} value={pm.id}>
+                          <div className="flex items-center gap-2">
+                            <CreditCard className="h-4 w-4" />
+                            <span>
+                              {pm.card_brand} •••• {pm.card_last_four}
+                              {processorName && <span className="text-muted-foreground ml-1">({processorName})</span>}
+                              {pm.is_default && <span className="text-muted-foreground ml-1">(Default)</span>}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted text-muted-foreground text-sm">
+                  <CreditCard className="h-4 w-4" />
+                  <span>No cards on file. Add a card first.</span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Frequency Options */}
           <div className="space-y-2">
             <Label>Frequency</Label>
@@ -281,7 +368,13 @@ export function AddSubscriptionModal({ member, open, onOpenChange }: AddSubscrip
           </Button>
           <Button
             onClick={() => createSubscriptionMutation.mutate()}
-            disabled={createSubscriptionMutation.isPending || !campaignId || !totalAmount}
+            disabled={
+              createSubscriptionMutation.isPending || 
+              !campaignId || 
+              !totalAmount || 
+              noCardsForCampaign ||
+              (billingMethod === "auto_cc" && filteredPaymentMethods.length === 0)
+            }
           >
             {createSubscriptionMutation.isPending && (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />

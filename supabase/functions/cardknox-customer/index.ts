@@ -285,6 +285,7 @@ serve(async (req) => {
         .insert({
           member_id: memberId,
           processor: processorType,
+          processor_id: processorId || null, // Save the processor ID for routing
           processor_payment_method_id: result.xToken || cardToken || result.xMaskedCardNumber,
           processor_customer_id: memberId,
           card_brand: result.xCardType || "Unknown",
