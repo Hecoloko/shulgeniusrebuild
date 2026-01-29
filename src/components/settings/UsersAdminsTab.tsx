@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Users, UserPlus, Shield, Trash2, Crown, UserCheck, User, Loader2, X } from "lucide-react";
+import { Users, UserPlus, Shield, Trash2, User, Loader2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useCurrentOrg } from "@/hooks/useCurrentOrg";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,15 +17,14 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 
 type RoleType = "shuladmin" | "shulmember";
 
-const ROLE_CONFIG: Record<RoleType, { label: string; icon: typeof Crown; color: string }> = {
+const ROLE_CONFIG: Record<RoleType, { label: string; icon: typeof Shield; color: string }> = {
   shuladmin: { label: "Shul Admin", icon: Shield, color: "bg-primary text-primary-foreground" },
   shulmember: { label: "Shul Member", icon: User, color: "bg-muted text-muted-foreground" },
 };
 
 export function UsersAdminsTab() {
-  const { roles, isShulowner } = useAuth();
+  const { orgId, isLoading: orgLoading, noOrgExists } = useCurrentOrg();
   const queryClient = useQueryClient();
-  const orgId = roles.find(r => r.organization_id)?.organization_id;
 
   // Dialog state
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -35,7 +34,7 @@ export function UsersAdminsTab() {
   const [inviteRole, setInviteRole] = useState<RoleType>("shulmember");
 
   // Fetch users with roles for this org
-  const { data: userRoles, isLoading } = useQuery({
+  const { data: userRoles, isLoading: usersLoading } = useQuery({
     queryKey: ["org-users", orgId],
     queryFn: async () => {
       if (!orgId) return [];
@@ -72,8 +71,6 @@ export function UsersAdminsTab() {
   // Invite mutation (placeholder - in real app would send invite email)
   const inviteMutation = useMutation({
     mutationFn: async () => {
-      // In production, this would call an edge function to send invite email
-      // For now, we'll show a success message
       await new Promise(resolve => setTimeout(resolve, 500));
     },
     onSuccess: () => {
@@ -129,6 +126,8 @@ export function UsersAdminsTab() {
     return ROLE_CONFIG[role as RoleType] || ROLE_CONFIG.shulmember;
   };
 
+  const isLoading = orgLoading || usersLoading;
+
   if (isLoading) {
     return (
       <Card className="premium-card">
@@ -142,12 +141,13 @@ export function UsersAdminsTab() {
     );
   }
 
-  if (!orgId) {
+  if (!orgId || noOrgExists) {
     return (
       <Card className="premium-card">
         <CardContent className="py-12 text-center text-muted-foreground">
           <Users className="h-12 w-12 mx-auto mb-4 opacity-30" />
-          <p>No organization assigned</p>
+          <p>No organization available</p>
+          <p className="text-sm mt-1">Create an organization in the General tab first</p>
         </CardContent>
       </Card>
     );
