@@ -350,11 +350,14 @@ export type Database = {
           family_head_id: string | null
           first_name: string
           id: string
+          invite_token: string | null
+          invite_token_expires_at: string | null
           is_active: boolean
           last_name: string
           membership_type: string | null
           notes: string | null
           organization_id: string
+          password_set_at: string | null
           phone: string | null
           updated_at: string
           user_id: string | null
@@ -367,11 +370,14 @@ export type Database = {
           family_head_id?: string | null
           first_name: string
           id?: string
+          invite_token?: string | null
+          invite_token_expires_at?: string | null
           is_active?: boolean
           last_name: string
           membership_type?: string | null
           notes?: string | null
           organization_id: string
+          password_set_at?: string | null
           phone?: string | null
           updated_at?: string
           user_id?: string | null
@@ -384,11 +390,14 @@ export type Database = {
           family_head_id?: string | null
           first_name?: string
           id?: string
+          invite_token?: string | null
+          invite_token_expires_at?: string | null
           is_active?: boolean
           last_name?: string
           membership_type?: string | null
           notes?: string | null
           organization_id?: string
+          password_set_at?: string | null
           phone?: string | null
           updated_at?: string
           user_id?: string | null
@@ -671,6 +680,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_member_by_invite_token: {
+        Args: { _token: string }
+        Returns: {
+          email: string
+          first_name: string
+          id: string
+          invite_token_expires_at: string
+          last_name: string
+          organization_id: string
+        }[]
+      }
       get_user_org_ids: { Args: { _user_id: string }; Returns: string[] }
       has_role: {
         Args: {
