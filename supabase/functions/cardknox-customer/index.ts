@@ -163,6 +163,9 @@ serve(async (req) => {
       // Cardknox gatewayjson expects JSON. We use cc:save with xTokenOnly=true to obtain a token
       // without charging. (Exact field set varies by account; this is the standard pattern.)
       const payload: Record<string, unknown> = {
+        xVersion: "5.0.0",
+        xSoftwareName: "ShulGenius",
+        xSoftwareVersion: "1.0",
         xKey: transactionKey!,
         xCommand: "cc:save",
         xCardNum: input.cardNumber,
