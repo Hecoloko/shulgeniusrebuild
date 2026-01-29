@@ -680,6 +680,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_member_role: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: undefined
+      }
       get_member_by_invite_token: {
         Args: { _token: string }
         Returns: {

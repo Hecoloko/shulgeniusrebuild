@@ -130,13 +130,16 @@ export default function MemberSetupPassword() {
         console.error("Failed to link member to user:", updateError);
       }
 
-      // Create user role for this member
-      const { error: roleError } = await supabase.rpc("create_member_role", {
-        _user_id: authData.user.id,
-        _org_id: memberInfo.organization_id,
-      });
+      // Create user role for this member using raw rpc call
+      const { error: roleError } = await supabase
+        .from("user_roles")
+        .insert({
+          user_id: authData.user.id,
+          role: "shulmember" as const,
+          organization_id: memberInfo.organization_id,
+        });
 
-      if (roleError) {
+      if (roleError && !roleError.message.includes("duplicate")) {
         console.error("Failed to create role:", roleError);
       }
 
