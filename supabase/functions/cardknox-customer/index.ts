@@ -342,6 +342,7 @@ serve(async (req) => {
           exp_month: cardExp ? parseInt(cardExp.slice(0, 2)) : null,
           exp_year: cardExp ? 2000 + parseInt(cardExp.slice(2, 4)) : null,
           is_default: isDefault || false,
+          nickname: body.nickname || null,
         });
 
       if (pmError) {

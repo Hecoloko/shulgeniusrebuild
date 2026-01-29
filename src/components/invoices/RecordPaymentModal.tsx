@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentOrg } from "@/hooks/useCurrentOrg";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Wallet, CreditCard } from "lucide-react";
+import { Wallet, CreditCard, Info } from "lucide-react";
 
 import {
   Dialog,
@@ -67,8 +67,34 @@ export function RecordPaymentModal({ invoice, open, onOpenChange }: RecordPaymen
     enabled: !!orgId && open,
   });
 
+  // Fetch existing payments for this invoice to calculate balance
+  const { data: existingPayments } = useQuery({
+    queryKey: ["invoice-payments", invoice?.id],
+    queryFn: async () => {
+      if (!invoice?.id) return [];
+      const { data, error } = await supabase
+        .from("payments")
+        .select("amount")
+        .eq("invoice_id", invoice.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!invoice?.id && open,
+  });
+
   const stripeProcessors = processors?.filter((p) => p.processor_type === "stripe") || [];
   const cardknoxProcessors = processors?.filter((p) => p.processor_type === "cardknox") || [];
+
+  // Calculate already paid amount and remaining balance
+  const paidAmount = existingPayments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
+  const balance = invoice ? invoice.total - paidAmount : 0;
+
+  // Set default amount to remaining balance when modal opens
+  useEffect(() => {
+    if (open && balance > 0) {
+      setAmount(balance.toFixed(2));
+    }
+  }, [open, balance]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -100,14 +126,24 @@ export function RecordPaymentModal({ invoice, open, onOpenChange }: RecordPaymen
 
       if (error) throw error;
 
-      // Update invoice status if fully paid
-      // For now, we'll mark it as paid if the payment equals or exceeds total
-      if (paymentAmount >= invoice.total) {
-        await supabase
-          .from("invoices")
-          .update({ status: "paid", paid_at: new Date().toISOString() })
-          .eq("id", invoice.id);
+      // Calculate new total paid including this payment
+      const newTotalPaid = paidAmount + paymentAmount;
+      
+      // Determine new status based on total payments vs invoice total
+      let newStatus: "paid" | "partially_paid";
+      let paidAt: string | null = null;
+      
+      if (newTotalPaid >= invoice.total) {
+        newStatus = "paid";
+        paidAt = new Date().toISOString();
+      } else {
+        newStatus = "partially_paid";
       }
+
+      await supabase
+        .from("invoices")
+        .update({ status: newStatus, paid_at: paidAt })
+        .eq("id", invoice.id);
 
       return true;
     },
@@ -115,6 +151,7 @@ export function RecordPaymentModal({ invoice, open, onOpenChange }: RecordPaymen
       toast.success("Payment recorded successfully");
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["payments"] });
+      queryClient.invalidateQueries({ queryKey: ["invoice-payments", invoice?.id] });
       resetForm();
       onOpenChange(false);
     },
@@ -144,8 +181,6 @@ export function RecordPaymentModal({ invoice, open, onOpenChange }: RecordPaymen
 
   if (!invoice) return null;
 
-  const balance = invoice.total; // This should account for previous payments
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -155,6 +190,35 @@ export function RecordPaymentModal({ invoice, open, onOpenChange }: RecordPaymen
             Invoice {invoice.invoice_number} - Balance: {formatCurrency(balance)}
           </DialogDescription>
         </DialogHeader>
+
+        {/* Processor Recommendation Banner */}
+        {(stripeProcessors.length > 0 || cardknoxProcessors.length > 0) && (
+          <div className="flex items-start gap-3 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+            <Info className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-medium text-primary">We recommend Sola for payments</p>
+              <p className="text-muted-foreground">Lower fees and faster settlement times</p>
+            </div>
+          </div>
+        )}
+
+        {/* Payment Summary */}
+        {paidAmount > 0 && (
+          <div className="p-3 bg-muted/50 rounded-lg space-y-1 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Invoice Total:</span>
+              <span>{formatCurrency(invoice.total)}</span>
+            </div>
+            <div className="flex justify-between text-emerald-600">
+              <span>Already Paid:</span>
+              <span>{formatCurrency(paidAmount)}</span>
+            </div>
+            <div className="flex justify-between font-semibold border-t pt-1">
+              <span>Remaining Balance:</span>
+              <span>{formatCurrency(balance)}</span>
+            </div>
+          </div>
+        )}
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as PaymentTab)} className="mt-4">
           <TabsList className="grid w-full grid-cols-3">

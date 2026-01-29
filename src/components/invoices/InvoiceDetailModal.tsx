@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { DollarSign, Printer, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { DollarSign, Printer, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 
 import {
@@ -50,6 +52,21 @@ interface InvoiceDetailModalProps {
 export function InvoiceDetailModal({ invoice, open, onOpenChange }: InvoiceDetailModalProps) {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
+  // Fetch payments for this invoice to calculate actual paid amount
+  const { data: payments } = useQuery({
+    queryKey: ["invoice-payments", invoice?.id],
+    queryFn: async () => {
+      if (!invoice?.id) return [];
+      const { data, error } = await supabase
+        .from("payments")
+        .select("amount")
+        .eq("invoice_id", invoice.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!invoice?.id && open,
+  });
+
   if (!invoice) return null;
 
   const formatCurrency = (amount: number) => {
@@ -63,22 +80,37 @@ export function InvoiceDetailModal({ invoice, open, onOpenChange }: InvoiceDetai
     return format(new Date(dateStr), "M/d/yyyy");
   };
 
-  // Calculate paid amount (would need to sum payments, for now we assume 0)
-  const paidAmount = 0;
+  // Calculate actual paid amount from payments
+  const paidAmount = payments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
+  const remainingBalance = invoice.total - paidAmount;
+  
+  // Check if invoice is fully paid
+  const isFullyPaid = invoice.status === "paid" || remainingBalance <= 0;
 
   const getStatusStyles = () => {
     switch (invoice.status.toLowerCase()) {
       case "paid":
         return "bg-emerald-50 text-emerald-600 border-emerald-200";
+      case "partially_paid":
+        return "bg-amber-50 text-amber-600 border-amber-200";
       case "sent":
         return "bg-gray-100 text-gray-700 border-gray-300";
       case "overdue":
         return "bg-red-50 text-red-600 border-red-200";
       case "draft":
         return "bg-gray-50 text-gray-500 border-gray-200";
+      case "void":
+        return "bg-gray-50 text-gray-400 border-gray-200 line-through";
       default:
         return "bg-gray-50 text-gray-500 border-gray-200";
     }
+  };
+
+  const getStatusLabel = () => {
+    if (invoice.status === "partially_paid") {
+      return "Partially Paid";
+    }
+    return invoice.status;
   };
 
   return (
@@ -93,13 +125,24 @@ export function InvoiceDetailModal({ invoice, open, onOpenChange }: InvoiceDetai
               <DialogDescription>View invoice details and payment history</DialogDescription>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                onClick={() => setShowPaymentModal(true)}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white gap-2"
-              >
-                <DollarSign className="h-4 w-4" />
-                Record Payment
-              </Button>
+              {isFullyPaid ? (
+                <Button
+                  disabled
+                  variant="secondary"
+                  className="bg-gray-200 text-gray-500 cursor-not-allowed gap-2"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  PAID
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => setShowPaymentModal(true)}
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white gap-2"
+                >
+                  <DollarSign className="h-4 w-4" />
+                  Record Payment
+                </Button>
+              )}
               <Button variant="outline" size="icon">
                 <Printer className="h-4 w-4" />
               </Button>
@@ -124,7 +167,7 @@ export function InvoiceDetailModal({ invoice, open, onOpenChange }: InvoiceDetai
                     <span
                       className={`inline-block px-3 py-1 rounded text-xs font-semibold border uppercase ${getStatusStyles()}`}
                     >
-                      {invoice.status}
+                      {getStatusLabel()}
                     </span>
                   </div>
                   <div>
@@ -176,10 +219,16 @@ export function InvoiceDetailModal({ invoice, open, onOpenChange }: InvoiceDetai
                     <span>Total:</span>
                     <span>{formatCurrency(invoice.total)}</span>
                   </div>
-                  <div className="flex justify-between w-48">
-                    <span className="text-emerald-600">Paid:</span>
-                    <span className="text-emerald-600">{formatCurrency(paidAmount)}</span>
+                  <div className="flex justify-between w-48 text-emerald-600">
+                    <span>Paid:</span>
+                    <span>{formatCurrency(paidAmount)}</span>
                   </div>
+                  {remainingBalance > 0 && (
+                    <div className="flex justify-between w-48 font-semibold text-amber-600 border-t pt-1">
+                      <span>Balance Due:</span>
+                      <span>{formatCurrency(remainingBalance)}</span>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
