@@ -1,25 +1,31 @@
 import { motion } from "framer-motion";
-import { Plus, Send, UserPlus, FileText } from "lucide-react";
+import { Send, UserPlus, FileText } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const actions = [
   {
     label: "New Invoice",
     icon: FileText,
     color: "btn-royal",
+    path: "/invoices",
   },
   {
     label: "Add Member",
     icon: UserPlus,
     color: "btn-gold",
+    path: "/members",
   },
   {
     label: "Send Reminder",
     icon: Send,
     color: "bg-muted hover:bg-muted/80 text-foreground",
+    path: "/invoices",
   },
 ];
 
 export function QuickActions() {
+  const navigate = useNavigate();
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -40,6 +46,7 @@ export function QuickActions() {
               transition={{ delay: 0.4 + index * 0.1 }}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
+              onClick={() => navigate(action.path)}
               className={`${action.color} flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200`}
             >
               <Icon className="w-5 h-5" />
