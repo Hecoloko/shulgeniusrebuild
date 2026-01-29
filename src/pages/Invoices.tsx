@@ -12,11 +12,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { CreateInvoiceModal } from "@/components/invoices/CreateInvoiceModal";
+import { InvoiceDetailModal } from "@/components/invoices/InvoiceDetailModal";
 
 export default function Invoices() {
   const { orgId, isLoading: orgLoading } = useCurrentOrg();
   const [activeTab, setActiveTab] = useState("invoices");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
 
   // Fetch invoices with member info
   const { data: invoices, isLoading: invoicesLoading } = useQuery({
@@ -126,6 +128,13 @@ export default function Invoices() {
         {/* Create Invoice Modal */}
         <CreateInvoiceModal open={showCreateModal} onOpenChange={setShowCreateModal} />
 
+        {/* Invoice Detail Modal */}
+        <InvoiceDetailModal
+          invoice={selectedInvoice}
+          open={!!selectedInvoice}
+          onOpenChange={(open) => !open && setSelectedInvoice(null)}
+        />
+
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="bg-transparent border-b border-border rounded-none h-auto p-0 mb-6">
@@ -194,7 +203,11 @@ export default function Invoices() {
                     </TableHeader>
                     <TableBody>
                       {invoices.map((invoice) => (
-                        <TableRow key={invoice.id}>
+                        <TableRow 
+                          key={invoice.id} 
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => setSelectedInvoice(invoice)}
+                        >
                           <TableCell className="font-mono text-sm">
                             {invoice.invoice_number}
                           </TableCell>
