@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.setup-shulowner]
 verify_jwt = false
+
+[functions.send-email]
+verify_jwt = false
