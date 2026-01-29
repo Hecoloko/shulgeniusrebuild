@@ -87,7 +87,7 @@ export function WebsiteTab() {
     },
   });
 
-  const publicUrl = slug ? `https://shulgenius.com/s/${slug}` : "";
+  const publicUrl = slug ? `${window.location.origin}/s/${slug}` : "";
 
   const handleCopy = () => {
     if (publicUrl) {
@@ -155,8 +155,8 @@ export function WebsiteTab() {
             <Label htmlFor="slug">URL Slug</Label>
             <div className="flex gap-2">
               <div className="flex-1 flex items-center">
-                <span className="text-sm text-muted-foreground bg-muted px-3 py-2 rounded-l-md border border-r-0">
-                  shulgenius.com/s/
+                <span className="text-sm text-muted-foreground bg-muted px-3 py-2 rounded-l-md border border-r-0 hidden sm:inline-flex items-center">
+                  {window.location.origin}/s/
                 </span>
                 <Input
                   id="slug"

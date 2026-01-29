@@ -79,6 +79,22 @@ export default function Members() {
     enabled: !!orgId,
   });
 
+  // Fetch organization for name and slug
+  const { data: org } = useQuery({
+    queryKey: ["organization", orgId],
+    queryFn: async () => {
+      if (!orgId) return null;
+      const { data, error } = await supabase
+        .from("organizations")
+        .select("*")
+        .eq("id", orgId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!orgId,
+  });
+
   // Fetch payment methods for selected member
   const { data: paymentMethods } = useQuery({
     queryKey: ["payment-methods", selectedMember?.id],
@@ -125,11 +141,42 @@ export default function Members() {
       if (settings?.cardknox_transaction_key) {
         createCardknoxCustomer(member);
       }
+      
+      // Send invite email
+      sendMemberInviteEmail(member);
     },
     onError: (err: Error) => {
       toast.error("Failed: " + err.message);
     },
   });
+
+  // Send member invite email
+  const sendMemberInviteEmail = async (member: any) => {
+    try {
+      if (!org) return;
+      
+      const portalUrl = `${window.location.origin}/s/${org.slug}`;
+      
+      const response = await supabase.functions.invoke("send-email", {
+        body: {
+          type: "member_invite",
+          to: member.email,
+          shulName: org.name,
+          memberName: `${member.first_name} ${member.last_name}`,
+          portalUrl,
+          adminEmail: org.email,
+        },
+      });
+      
+      if (response.error) {
+        console.error("Email send error:", response.error);
+      } else {
+        toast.success("Invite email sent to " + member.email);
+      }
+    } catch (err) {
+      console.error("Email error:", err);
+    }
+  };
 
   // Create Cardknox customer
   const createCardknoxCustomer = async (member: any) => {

@@ -11,6 +11,7 @@ import Invoices from "./pages/Invoices";
 import Campaigns from "./pages/Campaigns";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
+import PublicShul from "./pages/PublicShul";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,8 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
+            {/* Public Shul Page */}
+            <Route path="/s/:slug" element={<PublicShul />} />
             <Route
               path="/"
               element={

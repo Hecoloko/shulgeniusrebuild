@@ -126,6 +126,70 @@ serve(async (req) => {
         active_processor: "stripe",
       });
 
+    // 6. Send welcome email via Resend
+    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+    if (RESEND_API_KEY) {
+      try {
+        const emailRes = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${RESEND_API_KEY}`,
+          },
+          body: JSON.stringify({
+            from: "ShulGenius <noreply@shulgenius.com>",
+            to: [email],
+            subject: `Welcome to ShulGenius - ${org.name} is Ready!`,
+            html: `
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <style>
+                  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; color: #333; }
+                  .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                  .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0; }
+                  .content { background: #fff; padding: 30px; border: 1px solid #e5e5e5; border-top: none; border-radius: 0 0 12px 12px; }
+                  .cta { display: inline-block; background: #d4af37; color: #1a1a2e; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; }
+                  h1 { margin: 0; font-size: 24px; }
+                </style>
+              </head>
+              <body>
+                <div class="container">
+                  <div class="header">
+                    <div style="font-size: 32px; margin-bottom: 10px;">✡️</div>
+                    <h1>Welcome to ShulGenius!</h1>
+                  </div>
+                  <div class="content">
+                    <p>Mazal Tov! Your shul <strong>${org.name}</strong> has been successfully created.</p>
+                    <p>You now have access to powerful tools to manage your congregation:</p>
+                    <ul>
+                      <li>📊 <strong>Dashboard</strong> - Track donations and member activity</li>
+                      <li>👥 <strong>Members</strong> - Manage your congregation</li>
+                      <li>💳 <strong>Payments</strong> - Process dues and donations</li>
+                      <li>📨 <strong>Invoices</strong> - Create professional invoices</li>
+                    </ul>
+                    <p style="text-align: center; margin-top: 20px;">
+                      <a href="${Deno.env.get("SUPABASE_URL")?.replace('.supabase.co', '.lovable.app') || 'https://shulgenius.com'}" class="cta">Go to Dashboard →</a>
+                    </p>
+                    <p>B'hatzlacha,<br>The ShulGenius Team</p>
+                  </div>
+                </div>
+              </body>
+              </html>
+            `,
+          }),
+        });
+        
+        if (emailRes.ok) {
+          console.log("Welcome email sent to:", email);
+        } else {
+          console.error("Failed to send welcome email:", await emailRes.text());
+        }
+      } catch (emailErr) {
+        console.error("Error sending welcome email:", emailErr);
+      }
+    }
+
     console.log(`New shuladmin created: ${email} with org: ${org.name}`);
 
     // Success
