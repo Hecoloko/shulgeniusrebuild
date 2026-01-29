@@ -55,6 +55,62 @@ export type Database = {
           },
         ]
       }
+      billing_items: {
+        Row: {
+          amount: number
+          billing_interval: string | null
+          cardknox_item_id: string | null
+          created_at: string
+          currency: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          organization_id: string
+          stripe_price_id: string | null
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          billing_interval?: string | null
+          cardknox_item_id?: string | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          organization_id: string
+          stripe_price_id?: string | null
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          billing_interval?: string | null
+          cardknox_item_id?: string | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          organization_id?: string
+          stripe_price_id?: string | null
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_items_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaigns: {
         Row: {
           created_at: string
