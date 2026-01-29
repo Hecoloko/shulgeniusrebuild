@@ -146,24 +146,29 @@ export function CreateCampaignModal({ open, onOpenChange }: CreateCampaignModalP
                   </div>
                 </SelectItem>
               </SelectContent>
-            </Select>
+          </Select>
           </div>
 
-          {/* Goal Amount - only for drives */}
-          {type === "drive" && (
-            <div className="space-y-2">
-              <Label htmlFor="goal">Goal Amount</Label>
-              <Input
-                id="goal"
-                type="number"
-                min={0}
-                step={0.01}
-                value={goalAmount}
-                onChange={(e) => setGoalAmount(e.target.value)}
-                placeholder="0.00"
-              />
-            </div>
-          )}
+          {/* Goal Amount - shown for both types */}
+          <div className="space-y-2">
+            <Label htmlFor="goal">
+              Goal Amount {type === "fund" ? "(Optional)" : ""}
+            </Label>
+            <Input
+              id="goal"
+              type="number"
+              min={0}
+              step={0.01}
+              value={goalAmount}
+              onChange={(e) => setGoalAmount(e.target.value)}
+              placeholder="0.00"
+            />
+            <p className="text-xs text-muted-foreground">
+              {type === "fund" 
+                ? "Optional - leave empty for unlimited fund" 
+                : "Set a fundraising target for your drive"}
+            </p>
+          </div>
 
           {/* Dates Row */}
           <div className="grid grid-cols-2 gap-4">
