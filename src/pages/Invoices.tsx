@@ -11,10 +11,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
+import { CreateInvoiceModal } from "@/components/invoices/CreateInvoiceModal";
 
 export default function Invoices() {
   const { orgId, isLoading: orgLoading } = useCurrentOrg();
   const [activeTab, setActiveTab] = useState("invoices");
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Fetch invoices with member info
   const { data: invoices, isLoading: invoicesLoading } = useQuery({
@@ -114,12 +116,15 @@ export default function Invoices() {
               <CreditCard className="h-4 w-4" />
               Record Payment
             </Button>
-            <Button className="btn-royal gap-2">
+            <Button className="btn-royal gap-2" onClick={() => setShowCreateModal(true)}>
               <Plus className="h-4 w-4" />
               + Invoice
             </Button>
           </div>
         </div>
+
+        {/* Create Invoice Modal */}
+        <CreateInvoiceModal open={showCreateModal} onOpenChange={setShowCreateModal} />
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
