@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { forwardRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -13,6 +13,7 @@ import {
   LogOut,
   Building2,
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -22,12 +23,18 @@ const navigation = [
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
-export function Sidebar() {
+export const Sidebar = forwardRef<HTMLElement>((_, ref) => {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const { signOut, user, isShulowner } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
 
   return (
     <motion.aside
+      ref={ref}
       initial={false}
       animate={{ width: collapsed ? 80 : 280 }}
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
@@ -84,8 +91,12 @@ export function Sidebar() {
                 exit={{ opacity: 0 }}
                 className="overflow-hidden"
               >
-                <p className="text-sm font-medium text-sidebar-foreground truncate">Beth Israel</p>
-                <p className="text-xs text-sidebar-foreground/60">Admin Portal</p>
+                <p className="text-sm font-medium text-sidebar-foreground truncate">
+                  {isShulowner ? "Platform Owner" : "Beth Israel"}
+                </p>
+                <p className="text-xs text-sidebar-foreground/60">
+                  {isShulowner ? "Shulowner" : "Admin Portal"}
+                </p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -132,8 +143,18 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Collapse Toggle */}
+      {/* User Info & Collapse Toggle */}
       <div className="p-4 border-t border-sidebar-border">
+        {!collapsed && user && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="mb-3 px-3 py-2"
+          >
+            <p className="text-xs text-sidebar-foreground/60 truncate">{user.email}</p>
+          </motion.div>
+        )}
+
         <button
           onClick={() => setCollapsed(!collapsed)}
           className={`
@@ -158,6 +179,7 @@ export function Sidebar() {
           <motion.button
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
+            onClick={handleSignOut}
             className="w-full flex items-center gap-3 px-4 py-3 mt-2 rounded-xl
               text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/30
               transition-all duration-200"
@@ -169,4 +191,6 @@ export function Sidebar() {
       </div>
     </motion.aside>
   );
-}
+});
+
+Sidebar.displayName = "Sidebar";
