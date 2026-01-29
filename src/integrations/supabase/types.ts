@@ -413,8 +413,8 @@ export type Database = {
       organization_settings: {
         Row: {
           active_processor: string | null
-          cardknox_account_id: string | null
-          cardknox_api_key: string | null
+          cardknox_ifields_key: string | null
+          cardknox_transaction_key: string | null
           created_at: string
           id: string
           organization_id: string
@@ -424,8 +424,8 @@ export type Database = {
         }
         Insert: {
           active_processor?: string | null
-          cardknox_account_id?: string | null
-          cardknox_api_key?: string | null
+          cardknox_ifields_key?: string | null
+          cardknox_transaction_key?: string | null
           created_at?: string
           id?: string
           organization_id: string
@@ -435,8 +435,8 @@ export type Database = {
         }
         Update: {
           active_processor?: string | null
-          cardknox_account_id?: string | null
-          cardknox_api_key?: string | null
+          cardknox_ifields_key?: string | null
+          cardknox_transaction_key?: string | null
           created_at?: string
           id?: string
           organization_id?: string
