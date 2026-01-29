@@ -1,1 +1,10 @@
 project_id = "gqmblotcoddbcylgxcwe"
+
+[functions.cardknox-customer]
+verify_jwt = false
+
+[functions.create-account]
+verify_jwt = false
+
+[functions.setup-shulowner]
+verify_jwt = false

@@ -37,8 +37,8 @@ export function FinancialTab() {
   const [processorType, setProcessorType] = useState<ProcessorType>("stripe");
   const [stripeAccountId, setStripeAccountId] = useState("");
   const [stripePublishableKey, setStripePublishableKey] = useState("");
-  const [cardknoxAccountId, setCardknoxAccountId] = useState("");
-  const [cardknoxApiKey, setCardknoxApiKey] = useState("");
+  const [cardknoxIfieldsKey, setCardknoxIfieldsKey] = useState("");
+  const [cardknoxTransactionKey, setCardknoxTransactionKey] = useState("");
 
   // Item form
   const [itemName, setItemName] = useState("");
@@ -90,12 +90,12 @@ export function FinancialTab() {
       isActive: settings.active_processor === "stripe"
     });
   }
-  if (settings?.cardknox_account_id) {
+  if (settings?.cardknox_ifields_key) {
     processors.push({
       id: "cardknox",
       name: "Cardknox",
       type: "Cardknox",
-      accountId: settings.cardknox_account_id,
+      accountId: settings.cardknox_ifields_key,
       isActive: settings.active_processor === "cardknox"
     });
   }
@@ -111,9 +111,9 @@ export function FinancialTab() {
         updateData.stripe_account_id = stripeAccountId;
         updateData.stripe_publishable_key = stripePublishableKey;
       } else {
-        if (!cardknoxAccountId || !cardknoxApiKey) throw new Error("Cardknox credentials required");
-        updateData.cardknox_account_id = cardknoxAccountId;
-        updateData.cardknox_api_key = cardknoxApiKey;
+        if (!cardknoxIfieldsKey || !cardknoxTransactionKey) throw new Error("Cardknox credentials required");
+        updateData.cardknox_ifields_key = cardknoxIfieldsKey;
+        updateData.cardknox_transaction_key = cardknoxTransactionKey;
       }
 
       // Check if settings exist
@@ -212,8 +212,8 @@ export function FinancialTab() {
   const resetProcessorForm = () => {
     setStripeAccountId("");
     setStripePublishableKey("");
-    setCardknoxAccountId("");
-    setCardknoxApiKey("");
+    setCardknoxIfieldsKey("");
+    setCardknoxTransactionKey("");
     setProcessorType("stripe");
   };
 
@@ -322,23 +322,25 @@ export function FinancialTab() {
 
                 <TabsContent value="cardknox" className="space-y-4 pt-4">
                   <div className="space-y-2">
-                    <Label htmlFor="cardknox-account">Account ID *</Label>
+                    <Label htmlFor="cardknox-transaction">Transaction Key *</Label>
                     <Input
-                      id="cardknox-account"
-                      placeholder="Your Cardknox Account ID"
-                      value={cardknoxAccountId}
-                      onChange={(e) => setCardknoxAccountId(e.target.value)}
+                      id="cardknox-transaction"
+                      type="password"
+                      placeholder="Your Cardknox Transaction Key"
+                      value={cardknoxTransactionKey}
+                      onChange={(e) => setCardknoxTransactionKey(e.target.value)}
                     />
+                    <p className="text-xs text-muted-foreground">Found in Cardknox Portal → Account → Keys</p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="cardknox-key">API Key *</Label>
+                    <Label htmlFor="cardknox-ifields">iFields Key *</Label>
                     <Input
-                      id="cardknox-key"
-                      type="password"
-                      placeholder="Your Cardknox API Key"
-                      value={cardknoxApiKey}
-                      onChange={(e) => setCardknoxApiKey(e.target.value)}
+                      id="cardknox-ifields"
+                      placeholder="Your Cardknox iFields Key"
+                      value={cardknoxIfieldsKey}
+                      onChange={(e) => setCardknoxIfieldsKey(e.target.value)}
                     />
+                    <p className="text-xs text-muted-foreground">Used for secure card tokenization</p>
                   </div>
                 </TabsContent>
               </Tabs>
