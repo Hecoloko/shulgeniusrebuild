@@ -1,19 +1,55 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { CreditCard, Plus, Play, Clock, Trash2, Edit, Zap } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { 
+  CreditCard, Plus, Play, Clock, Trash2, Edit, Zap, 
+  Loader2, DollarSign, Package, RefreshCw, Check, X
+} from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+type ProcessorType = "stripe" | "cardknox";
+type ItemType = "subscription" | "one_time";
+type BillingInterval = "weekly" | "monthly" | "quarterly" | "yearly";
 
 export function FinancialTab() {
   const { roles } = useAuth();
+  const queryClient = useQueryClient();
   const orgId = roles.find(r => r.organization_id)?.organization_id;
 
+  // Dialog states
+  const [processorOpen, setProcessorOpen] = useState(false);
+  const [itemOpen, setItemOpen] = useState(false);
+  const [deleteItemOpen, setDeleteItemOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<any>(null);
+
+  // Processor form
+  const [processorType, setProcessorType] = useState<ProcessorType>("stripe");
+  const [stripeAccountId, setStripeAccountId] = useState("");
+  const [stripePublishableKey, setStripePublishableKey] = useState("");
+  const [cardknoxAccountId, setCardknoxAccountId] = useState("");
+  const [cardknoxApiKey, setCardknoxApiKey] = useState("");
+
+  // Item form
+  const [itemName, setItemName] = useState("");
+  const [itemDescription, setItemDescription] = useState("");
+  const [itemAmount, setItemAmount] = useState("");
+  const [itemType, setItemType] = useState<ItemType>("one_time");
+  const [itemInterval, setItemInterval] = useState<BillingInterval>("monthly");
+
   // Fetch organization settings
-  const { data: settings, isLoading } = useQuery({
+  const { data: settings, isLoading: settingsLoading } = useQuery({
     queryKey: ["org-settings", orgId],
     queryFn: async () => {
       if (!orgId) return null;
@@ -28,7 +64,23 @@ export function FinancialTab() {
     enabled: !!orgId,
   });
 
-  // Build processors list from settings
+  // Fetch billing items
+  const { data: billingItems, isLoading: itemsLoading } = useQuery({
+    queryKey: ["billing-items", orgId],
+    queryFn: async () => {
+      if (!orgId) return [];
+      const { data, error } = await supabase
+        .from("billing_items")
+        .select("*")
+        .eq("organization_id", orgId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!orgId,
+  });
+
+  // Build processors list
   const processors = [];
   if (settings?.stripe_account_id) {
     processors.push({
@@ -49,16 +101,146 @@ export function FinancialTab() {
     });
   }
 
+  // Add/Update processor mutation
+  const processorMutation = useMutation({
+    mutationFn: async () => {
+      if (!orgId) throw new Error("No organization");
+
+      const updateData: any = {};
+      if (processorType === "stripe") {
+        if (!stripeAccountId) throw new Error("Stripe Account ID required");
+        updateData.stripe_account_id = stripeAccountId;
+        updateData.stripe_publishable_key = stripePublishableKey;
+      } else {
+        if (!cardknoxAccountId || !cardknoxApiKey) throw new Error("Cardknox credentials required");
+        updateData.cardknox_account_id = cardknoxAccountId;
+        updateData.cardknox_api_key = cardknoxApiKey;
+      }
+
+      // Check if settings exist
+      if (settings) {
+        const { error } = await supabase
+          .from("organization_settings")
+          .update(updateData)
+          .eq("organization_id", orgId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("organization_settings")
+          .insert({ organization_id: orgId, ...updateData });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["org-settings", orgId] });
+      toast.success(`${processorType === "stripe" ? "Stripe" : "Cardknox"} connected successfully`);
+      setProcessorOpen(false);
+      resetProcessorForm();
+    },
+    onError: (err: Error) => {
+      toast.error("Failed: " + err.message);
+    },
+  });
+
+  // Set default processor mutation
+  const setDefaultMutation = useMutation({
+    mutationFn: async (processor: ProcessorType) => {
+      if (!orgId) throw new Error("No organization");
+      const { error } = await supabase
+        .from("organization_settings")
+        .update({ active_processor: processor })
+        .eq("organization_id", orgId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["org-settings", orgId] });
+      toast.success("Default processor updated");
+    },
+    onError: (err: Error) => {
+      toast.error("Failed: " + err.message);
+    },
+  });
+
+  // Add billing item mutation
+  const addItemMutation = useMutation({
+    mutationFn: async () => {
+      if (!orgId) throw new Error("No organization");
+      if (!itemName || !itemAmount) throw new Error("Name and amount required");
+
+      const { error } = await supabase
+        .from("billing_items")
+        .insert({
+          organization_id: orgId,
+          name: itemName,
+          description: itemDescription,
+          amount: parseFloat(itemAmount),
+          type: itemType,
+          billing_interval: itemType === "subscription" ? itemInterval : null,
+        });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing-items", orgId] });
+      toast.success("Billing item created");
+      setItemOpen(false);
+      resetItemForm();
+    },
+    onError: (err: Error) => {
+      toast.error("Failed: " + err.message);
+    },
+  });
+
+  // Delete billing item mutation
+  const deleteItemMutation = useMutation({
+    mutationFn: async (itemId: string) => {
+      const { error } = await supabase
+        .from("billing_items")
+        .delete()
+        .eq("id", itemId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing-items", orgId] });
+      toast.success("Billing item deleted");
+      setDeleteItemOpen(false);
+      setSelectedItem(null);
+    },
+    onError: (err: Error) => {
+      toast.error("Failed: " + err.message);
+    },
+  });
+
+  const resetProcessorForm = () => {
+    setStripeAccountId("");
+    setStripePublishableKey("");
+    setCardknoxAccountId("");
+    setCardknoxApiKey("");
+    setProcessorType("stripe");
+  };
+
+  const resetItemForm = () => {
+    setItemName("");
+    setItemDescription("");
+    setItemAmount("");
+    setItemType("one_time");
+    setItemInterval("monthly");
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(amount);
+  };
+
+  const isLoading = settingsLoading || itemsLoading;
+
   if (isLoading) {
     return (
       <div className="space-y-6">
         <Card className="premium-card">
-          <CardHeader>
-            <Skeleton className="h-6 w-48" />
-          </CardHeader>
-          <CardContent>
-            <Skeleton className="h-20 w-full" />
-          </CardContent>
+          <CardHeader><Skeleton className="h-6 w-48" /></CardHeader>
+          <CardContent><Skeleton className="h-20 w-full" /></CardContent>
         </Card>
       </div>
     );
@@ -82,22 +264,354 @@ export function FinancialTab() {
       transition={{ duration: 0.4 }}
       className="space-y-6"
     >
-      {/* Recurring Billing Management */}
+      {/* Payment Processors */}
+      <Card className="premium-card border-l-4 border-l-gold">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-gold" />
+              Payment Processors
+            </CardTitle>
+            <CardDescription>
+              Connect payment gateways and select your default processor
+            </CardDescription>
+          </div>
+
+          {/* Add Processor Dialog */}
+          <Dialog open={processorOpen} onOpenChange={setProcessorOpen}>
+            <DialogTrigger asChild>
+              <Button className="btn-royal" size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Processor
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Connect Payment Processor</DialogTitle>
+                <DialogDescription>
+                  Add your payment gateway credentials
+                </DialogDescription>
+              </DialogHeader>
+
+              <Tabs value={processorType} onValueChange={(v) => setProcessorType(v as ProcessorType)}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="stripe">Stripe</TabsTrigger>
+                  <TabsTrigger value="cardknox">Cardknox</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="stripe" className="space-y-4 pt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="stripe-account">Account ID *</Label>
+                    <Input
+                      id="stripe-account"
+                      placeholder="acct_..."
+                      value={stripeAccountId}
+                      onChange={(e) => setStripeAccountId(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="stripe-key">Publishable Key</Label>
+                    <Input
+                      id="stripe-key"
+                      placeholder="pk_live_..."
+                      value={stripePublishableKey}
+                      onChange={(e) => setStripePublishableKey(e.target.value)}
+                    />
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="cardknox" className="space-y-4 pt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="cardknox-account">Account ID *</Label>
+                    <Input
+                      id="cardknox-account"
+                      placeholder="Your Cardknox Account ID"
+                      value={cardknoxAccountId}
+                      onChange={(e) => setCardknoxAccountId(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="cardknox-key">API Key *</Label>
+                    <Input
+                      id="cardknox-key"
+                      type="password"
+                      placeholder="Your Cardknox API Key"
+                      value={cardknoxApiKey}
+                      onChange={(e) => setCardknoxApiKey(e.target.value)}
+                    />
+                  </div>
+                </TabsContent>
+              </Tabs>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setProcessorOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  className="btn-gold"
+                  onClick={() => processorMutation.mutate()}
+                  disabled={processorMutation.isPending}
+                >
+                  {processorMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Connect
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </CardHeader>
+
+        <CardContent>
+          {processors.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <CreditCard className="h-10 w-10 mx-auto mb-3 opacity-30" />
+              <p>No payment processors configured</p>
+              <p className="text-sm mt-1">Add a processor to start accepting payments</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Processor</TableHead>
+                  <TableHead>Account ID</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {processors.map((processor) => (
+                  <TableRow key={processor.id}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        {processor.isActive && <Zap className="h-4 w-4 text-gold" />}
+                        {processor.name}
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm text-muted-foreground">
+                      {processor.accountId.slice(0, 15)}...
+                    </TableCell>
+                    <TableCell>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                        processor.isActive 
+                          ? "bg-success/10 text-success" 
+                          : "bg-muted text-muted-foreground"
+                      }`}>
+                        {processor.isActive ? "Default" : "Connected"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {!processor.isActive && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => setDefaultMutation.mutate(processor.id as ProcessorType)}
+                          disabled={setDefaultMutation.isPending}
+                        >
+                          <Check className="h-4 w-4 mr-1" />
+                          Set Default
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Billing Items */}
       <Card className="premium-card">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-gold" />
-              Recurring Billing Management
+              <Package className="h-5 w-5" />
+              Billing Items
             </CardTitle>
             <CardDescription>
-              Manually trigger billing or view automated billing history
+              Create subscription plans and one-time charges for invoices
             </CardDescription>
           </div>
-          <Button className="btn-royal">
-            <Play className="h-4 w-4 mr-2" />
-            Run Billing Now
-          </Button>
+
+          {/* Add Item Dialog */}
+          <Dialog open={itemOpen} onOpenChange={setItemOpen}>
+            <DialogTrigger asChild>
+              <Button className="btn-royal" size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Item
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create Billing Item</DialogTitle>
+                <DialogDescription>
+                  Add a subscription or one-time charge
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="item-name">Name *</Label>
+                  <Input
+                    id="item-name"
+                    placeholder="Gold Membership"
+                    value={itemName}
+                    onChange={(e) => setItemName(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="item-desc">Description</Label>
+                  <Input
+                    id="item-desc"
+                    placeholder="Annual family membership"
+                    value={itemDescription}
+                    onChange={(e) => setItemDescription(e.target.value)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="item-amount">Amount *</Label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="item-amount"
+                        type="number"
+                        step="0.01"
+                        placeholder="100.00"
+                        className="pl-9"
+                        value={itemAmount}
+                        onChange={(e) => setItemAmount(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Type</Label>
+                    <Select value={itemType} onValueChange={(v) => setItemType(v as ItemType)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="one_time">One-time</SelectItem>
+                        <SelectItem value="subscription">Subscription</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {itemType === "subscription" && (
+                  <div className="space-y-2">
+                    <Label>Billing Interval</Label>
+                    <Select value={itemInterval} onValueChange={(v) => setItemInterval(v as BillingInterval)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="quarterly">Quarterly</SelectItem>
+                        <SelectItem value="yearly">Yearly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setItemOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  className="btn-gold"
+                  onClick={() => addItemMutation.mutate()}
+                  disabled={addItemMutation.isPending || !itemName || !itemAmount}
+                >
+                  {addItemMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Create Item
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </CardHeader>
+
+        <CardContent>
+          {!billingItems?.length ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Package className="h-10 w-10 mx-auto mb-3 opacity-30" />
+              <p>No billing items created</p>
+              <p className="text-sm mt-1">Add items to use in invoices</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Interval</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {billingItems.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{item.name}</p>
+                        {item.description && (
+                          <p className="text-xs text-muted-foreground">{item.description}</p>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                        item.type === "subscription" 
+                          ? "bg-primary/10 text-primary" 
+                          : "bg-muted text-muted-foreground"
+                      }`}>
+                        {item.type === "subscription" ? (
+                          <span className="flex items-center gap-1">
+                            <RefreshCw className="h-3 w-3" />
+                            Recurring
+                          </span>
+                        ) : "One-time"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {formatCurrency(item.amount)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground capitalize">
+                      {item.billing_interval || "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={() => {
+                          setSelectedItem(item);
+                          setDeleteItemOpen(true);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Recurring Billing Info */}
+      <Card className="premium-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5" />
+            Automated Billing
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/30">
@@ -113,76 +627,28 @@ export function FinancialTab() {
         </CardContent>
       </Card>
 
-      {/* Payment Processors */}
-      <Card className="premium-card">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <CreditCard className="h-5 w-5" />
-              Payment Processors
-            </CardTitle>
-            <CardDescription>
-              Manage payment processor accounts and link them to campaigns
-            </CardDescription>
-          </div>
-          <Button className="btn-royal" size="sm">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Processor
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {processors.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <CreditCard className="h-10 w-10 mx-auto mb-3 opacity-30" />
-              <p>No payment processors configured</p>
-              <p className="text-sm mt-1">Add a processor to start accepting payments</p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Account Name</TableHead>
-                  <TableHead>Processor Type</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {processors.map((processor) => (
-                  <TableRow key={processor.id}>
-                    <TableCell className="font-medium">{processor.name}</TableCell>
-                    <TableCell>
-                      <span className="px-2.5 py-1 rounded border text-xs font-medium">
-                        {processor.type}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-success/10 text-success">
-                        Active
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        {processor.isActive && (
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-gold">
-                            <Zap className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      {/* Delete Item Confirmation */}
+      <AlertDialog open={deleteItemOpen} onOpenChange={setDeleteItemOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Billing Item</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{selectedItem?.name}</strong>? 
+              This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => selectedItem && deleteItemMutation.mutate(selectedItem.id)}
+            >
+              {deleteItemMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </motion.div>
   );
 }
