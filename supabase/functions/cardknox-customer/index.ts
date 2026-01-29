@@ -8,6 +8,7 @@ const corsHeaders = {
 };
 
 const CARDKNOX_API_BASE = "https://api.cardknox.com/v2";
+const CARDKNOX_GATEWAY_URL = "https://x1.cardknox.com/gatewayjson";
 
 interface CardknoxRequest {
   action: "create_customer" | "save_card";
@@ -18,9 +19,13 @@ interface CardknoxRequest {
   processorId?: string;
   // For save_card action
   cardToken?: string;
+  // Optional: raw card details (will be tokenized server-side)
+  cardNumber?: string;
   cardExp?: string; // MMYY format
+  cardCvc?: string;
   zipCode?: string;
   isDefault?: boolean;
+  nickname?: string | null;
 }
 
 serve(async (req) => {
@@ -52,8 +57,10 @@ serve(async (req) => {
       memberEmail, 
       memberName, 
       processorId,
-      cardToken, 
+      cardToken,
+      cardNumber,
       cardExp,
+      cardCvc,
       zipCode,
       isDefault,
     } = body;
@@ -146,6 +153,46 @@ serve(async (req) => {
       return await response.json();
     }
 
+    // Tokenize card via Cardknox gateway. This avoids needing iFields on the client.
+    async function tokenizeCard(input: {
+      cardNumber: string;
+      cardExp?: string;
+      cardCvc?: string;
+      zipCode?: string;
+    }): Promise<{ token: string } | { error: string }> {
+      // Cardknox gateway expects xKey + command; exact field set varies by account.
+      // We use cc:save with TokenOnly to obtain a reusable token without charging.
+      const form = new URLSearchParams();
+      form.set("xKey", transactionKey!);
+      form.set("xCommand", "cc:save");
+      form.set("xCardNum", input.cardNumber);
+      if (input.cardExp) form.set("xExp", input.cardExp);
+      if (input.cardCvc) form.set("xCVV", input.cardCvc);
+      if (input.zipCode) form.set("xZip", input.zipCode);
+      form.set("xTokenOnly", "true");
+
+      const resp = await fetch(CARDKNOX_GATEWAY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: form,
+      });
+
+      const data = await resp.json().catch(async () => {
+        const text = await resp.text();
+        return { _raw: text };
+      });
+
+      const token = (data?.xToken ?? data?.Token ?? data?.token) as string | undefined;
+      const result = (data?.xResult ?? data?.Result ?? data?.result) as string | undefined;
+
+      if (token) return { token };
+
+      const err =
+        (data?.xError ?? data?.Error ?? data?.error ?? data?._raw) ||
+        `Failed to tokenize card${result ? ` (result=${result})` : ""}`;
+      return { error: String(err) };
+    }
+
     if (action === "create_customer") {
       // Create customer in Cardknox using their Recurring API
       const customerData = {
@@ -178,7 +225,28 @@ serve(async (req) => {
     }
 
     if (action === "save_card") {
-      if (!cardToken) {
+      let effectiveToken = cardToken || null;
+
+      // Backwards compatibility: if the client sent raw card fields, tokenize them here.
+      if (!effectiveToken && cardNumber) {
+        const tokenResult = await tokenizeCard({
+          cardNumber,
+          cardExp,
+          cardCvc,
+          zipCode,
+        });
+
+        if ("error" in tokenResult) {
+          return new Response(
+            JSON.stringify({ error: tokenResult.error }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        effectiveToken = tokenResult.token;
+      }
+
+      if (!effectiveToken) {
         return new Response(
           JSON.stringify({ error: "Card token is required" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -210,7 +278,7 @@ serve(async (req) => {
       // Add payment method to customer
       const paymentMethodData: Record<string, unknown> = {
         CustomerId: cardknoxCustomerId,
-        Token: cardToken,
+        Token: effectiveToken,
         TokenType: "cc",
         SetAsDefault: isDefault || false,
       };
@@ -250,7 +318,7 @@ serve(async (req) => {
           member_id: memberId,
           processor: processorType,
           processor_id: processorId || null,
-          processor_payment_method_id: result.PaymentMethodId || cardToken,
+          processor_payment_method_id: result.PaymentMethodId || effectiveToken,
           processor_customer_id: cardknoxCustomerId,
           card_brand: result.CardType || "Unknown",
           card_last_four: result.MaskedCardNumber?.slice(-4) || "****",
