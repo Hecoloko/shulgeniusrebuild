@@ -125,8 +125,8 @@ serve(async (req) => {
     }
 
     if (action === "create_customer") {
-      // Create customer in Cardknox using their Gateway API
-      const customerData = new URLSearchParams({
+      // Create customer in Cardknox using their Gateway JSON API
+      const customerData = {
         xKey: transactionKey,
         xVersion: "5.0.0",
         xSoftwareName: "ShulGenius",
@@ -136,12 +136,14 @@ serve(async (req) => {
         xBillFirstName: memberName.split(" ")[0] || memberName,
         xBillLastName: memberName.split(" ").slice(1).join(" ") || "",
         xEmail: memberEmail,
-      });
+      };
+
+      console.log("Sending customer create request:", JSON.stringify({ ...customerData, xKey: "[REDACTED]" }));
 
       const response = await fetch("https://x1.cardknox.com/gatewayjson", {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: customerData.toString(),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(customerData),
       });
 
       const result = await response.json();
@@ -174,19 +176,19 @@ serve(async (req) => {
       }
 
       // First, ensure customer exists in Cardknox
-      const customerCheckData = new URLSearchParams({
+      const customerCheckData = {
         xKey: transactionKey,
         xVersion: "5.0.0",
         xSoftwareName: "ShulGenius",
         xSoftwareVersion: "1.0.0",
         xCommand: "customer:report",
         xCustomerID: memberId,
-      });
+      };
 
       const customerCheckResponse = await fetch("https://x1.cardknox.com/gatewayjson", {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: customerCheckData.toString(),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(customerCheckData),
       });
 
       const customerCheckResult = await customerCheckResponse.json();
@@ -194,7 +196,7 @@ serve(async (req) => {
       // If customer doesn't exist, create them first
       if (customerCheckResult.xResult !== "A" || !customerCheckResult.xCustomerID) {
         console.log("Creating customer in Cardknox...");
-        const createCustomerData = new URLSearchParams({
+        const createCustomerData = {
           xKey: transactionKey,
           xVersion: "5.0.0",
           xSoftwareName: "ShulGenius",
@@ -204,12 +206,12 @@ serve(async (req) => {
           xBillFirstName: memberName.split(" ")[0] || memberName,
           xBillLastName: memberName.split(" ").slice(1).join(" ") || "",
           xEmail: memberEmail,
-        });
+        };
 
         const createResponse = await fetch("https://x1.cardknox.com/gatewayjson", {
           method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: createCustomerData.toString(),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(createCustomerData),
         });
 
         const createResult = await createResponse.json();
@@ -227,7 +229,7 @@ serve(async (req) => {
       }
 
       // Save card to customer in Cardknox
-      const cardData = new URLSearchParams({
+      const cardData: Record<string, string> = {
         xKey: transactionKey,
         xVersion: "5.0.0",
         xSoftwareName: "ShulGenius",
@@ -235,30 +237,32 @@ serve(async (req) => {
         xCommand: "customer:save",
         xCustomerID: memberId,
         xTokenType: "cc",
-      });
+      };
 
       // Use token if provided, otherwise use card number
       if (cardToken) {
-        cardData.append("xToken", cardToken);
+        cardData.xToken = cardToken;
       } else if (cardNumber) {
-        cardData.append("xCardNum", cardNumber);
+        cardData.xCardNum = cardNumber;
         if (cardCvc) {
-          cardData.append("xCVV", cardCvc);
+          cardData.xCVV = cardCvc;
         }
       }
 
       if (cardExp) {
-        cardData.append("xExp", cardExp);
+        cardData.xExp = cardExp;
       }
 
       if (zipCode) {
-        cardData.append("xBillZip", zipCode);
+        cardData.xBillZip = zipCode;
       }
+
+      console.log("Sending save card request:", JSON.stringify({ ...cardData, xKey: "[REDACTED]", xCardNum: "[REDACTED]", xCVV: "[REDACTED]" }));
 
       const response = await fetch("https://x1.cardknox.com/gatewayjson", {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: cardData.toString(),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cardData),
       });
 
       const result = await response.json();
