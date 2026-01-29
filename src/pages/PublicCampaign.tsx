@@ -3,18 +3,15 @@ import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
-import {
-  Home, Calendar, Heart, Grid3X3, LogOut, TrendingUp, Target, Clock
-} from "lucide-react";
+import { Heart, TrendingUp, Target, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAuth } from "@/contexts/AuthContext";
+import { PublicNavbar } from "@/components/public/PublicNavbar";
 
 export default function PublicCampaign() {
   const { slug, campaignId } = useParams<{ slug: string; campaignId: string }>();
-  const { user, signOut } = useAuth();
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
 
   // Fetch organization by slug
@@ -134,72 +131,10 @@ export default function PublicCampaign() {
     );
   }
 
-  const navItems = [
-    { id: "home", label: "Home", icon: Home, href: `/s/${slug}` },
-    { id: "schedule", label: "Schedule", icon: Calendar, href: `/s/${slug}` },
-    { id: "donate", label: "Donate", icon: Heart, href: `/s/${slug}` },
-  ];
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-background">
       {/* Navigation */}
-      <header className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-xl border-b border-slate-700">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="flex items-center justify-between h-16">
-            {/* Logo */}
-            <div className="flex items-center gap-3">
-              {org.logo_url ? (
-                <img src={org.logo_url} alt={org.name} className="h-10 w-10 rounded-full object-cover" />
-              ) : (
-                <div className="h-10 w-10 rounded-full bg-white/10 flex items-center justify-center">
-                  <span className="text-lg font-bold text-white">
-                    {org.name.charAt(0)}
-                  </span>
-                </div>
-              )}
-              <span className="font-semibold text-white">{org.name}</span>
-            </div>
-
-            {/* Nav Tabs */}
-            <nav className="hidden md:flex items-center gap-1">
-              {navItems.map((item) => (
-                <Link
-                  key={item.id}
-                  to={item.href}
-                  className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium text-slate-300 hover:text-white hover:bg-white/10 transition-all"
-                >
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-
-            {/* Right Actions */}
-            <div className="flex items-center gap-2">
-              <Button variant="default" asChild className="hidden sm:flex gap-2 bg-primary hover:bg-primary/90">
-                <Link to="/portal/login">
-                  <Grid3X3 className="h-4 w-4" />
-                  Member Portal
-                </Link>
-              </Button>
-              {user && (
-                <>
-                  <Button variant="ghost" asChild className="hidden sm:flex gap-2 text-white hover:bg-white/10">
-                    <Link to="/">
-                      <Grid3X3 className="h-4 w-4" />
-                      Admin
-                    </Link>
-                  </Button>
-                  <Button variant="ghost" onClick={() => signOut()} className="gap-2 text-white hover:bg-white/10">
-                    <LogOut className="h-4 w-4" />
-                    <span className="hidden sm:inline">Logout</span>
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
+      <PublicNavbar org={org} />
 
       {/* Hero Section */}
       <div className="text-center pt-12 pb-8 px-4">

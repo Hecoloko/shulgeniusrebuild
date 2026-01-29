@@ -4,18 +4,16 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
 import {
-  Home, Calendar, Heart, Users, Grid3X3, LogOut,
-  ArrowRight, Sparkles, ChevronRight
+  Home, Calendar, Heart, ArrowRight, Sparkles, ChevronRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAuth } from "@/contexts/AuthContext";
+import { PublicNavbar } from "@/components/public/PublicNavbar";
 
 type TabType = "home" | "schedule" | "donate";
 
 export default function PublicShul() {
   const { slug } = useParams<{ slug: string }>();
-  const { user, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>("home");
 
   // Fetch organization by slug
@@ -85,65 +83,11 @@ export default function PublicShul() {
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-accent/20 via-background to-background">
       {/* Navigation */}
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="flex items-center justify-between h-16">
-            {/* Logo */}
-            <div className="flex items-center gap-3">
-              {org.logo_url ? (
-                <img src={org.logo_url} alt={org.name} className="h-10 w-10 rounded-full object-cover" />
-              ) : (
-                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-lg font-bold text-primary">
-                    {org.name.charAt(0)}
-                  </span>
-                </div>
-              )}
-              <span className="font-semibold text-foreground">{org.name}</span>
-            </div>
-
-            {/* Nav Tabs */}
-            <nav className="hidden md:flex items-center gap-1">
-              {navItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id as TabType)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                    activeTab === item.id
-                      ? "bg-foreground text-background"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                  }`}
-                >
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
-                </button>
-              ))}
-            </nav>
-
-            {/* Right Actions */}
-            <div className="flex items-center gap-2">
-              <Button variant="default" className="hidden sm:flex gap-2 bg-primary hover:bg-primary/90">
-                <Grid3X3 className="h-4 w-4" />
-                Member Portal
-              </Button>
-              {user && (
-                <>
-                  <Button variant="ghost" asChild className="hidden sm:flex gap-2">
-                    <Link to="/">
-                      <Grid3X3 className="h-4 w-4" />
-                      Admin
-                    </Link>
-                  </Button>
-                  <Button variant="ghost" onClick={() => signOut()} className="gap-2">
-                    <LogOut className="h-4 w-4" />
-                    <span className="hidden sm:inline">Logout</span>
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
+      <PublicNavbar 
+        org={org} 
+        activeTab={activeTab} 
+        onTabChange={(tab) => setActiveTab(tab as TabType)} 
+      />
 
       {/* Mobile Nav */}
       <div className="md:hidden sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b px-4 py-2">
