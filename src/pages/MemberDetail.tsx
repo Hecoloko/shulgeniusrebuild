@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { AddCardModal } from "@/components/members/AddCardModal";
 
 export default function MemberDetail() {
   const { memberId } = useParams<{ memberId: string }>();
@@ -30,6 +31,7 @@ export default function MemberDetail() {
 
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
+  const [addCardOpen, setAddCardOpen] = useState(false);
 
   // Edit form state
   const [editFirstName, setEditFirstName] = useState("");
@@ -698,7 +700,7 @@ export default function MemberDetail() {
                     <CardTitle>Payment Methods</CardTitle>
                     <CardDescription>{paymentMethods?.length || 0} card(s) on file</CardDescription>
                   </div>
-                  <Button className="gap-2">
+                  <Button className="gap-2" onClick={() => setAddCardOpen(true)}>
                     <Plus className="h-4 w-4" />
                     Add Card
                   </Button>
@@ -736,6 +738,13 @@ export default function MemberDetail() {
                   )}
                 </CardContent>
               </Card>
+              
+              {/* Add Card Modal */}
+              <AddCardModal
+                member={member}
+                open={addCardOpen}
+                onOpenChange={setAddCardOpen}
+              />
             </TabsContent>
 
             {/* Family Tab */}
