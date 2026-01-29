@@ -1,12 +1,18 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Settings as SettingsIcon, User, Building2, Shield } from "lucide-react";
+import { Settings as SettingsIcon, Building2, Users, Globe, CreditCard, Mail, FileDown } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ProfileTab } from "@/components/settings/ProfileTab";
-import { OrganizationsTab } from "@/components/settings/OrganizationsTab";
-import { RolesTab } from "@/components/settings/RolesTab";
+import { GeneralTab } from "@/components/settings/GeneralTab";
+import { UsersAdminsTab } from "@/components/settings/UsersAdminsTab";
+import { WebsiteTab } from "@/components/settings/WebsiteTab";
+import { FinancialTab } from "@/components/settings/FinancialTab";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Settings() {
+  const { isShulowner } = useAuth();
+  const [activeTab, setActiveTab] = useState("general");
+
   return (
     <DashboardLayout>
       {/* Page Header */}
@@ -16,44 +22,79 @@ export default function Settings() {
         transition={{ duration: 0.5 }}
         className="mb-8"
       >
-        <div className="flex items-center gap-3 mb-2">
-          <div className="p-2 rounded-xl bg-gold/10">
-            <SettingsIcon className="h-6 w-6 text-gold" />
-          </div>
-          <h1 className="text-3xl font-bold text-foreground">Settings</h1>
-        </div>
+        <h1 className="text-3xl font-bold text-foreground mb-2">Settings & Configuration</h1>
         <p className="text-muted-foreground">
-          Manage your profile, organizations, and platform settings
+          Manage your shul's settings, payment processors, website, and integrations
         </p>
       </motion.div>
 
-      {/* Settings Tabs */}
-      <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList className="bg-muted/50 p-1">
-          <TabsTrigger value="profile" className="data-[state=active]:bg-card gap-2">
-            <User className="h-4 w-4" />
-            Profile
-          </TabsTrigger>
-          <TabsTrigger value="organizations" className="data-[state=active]:bg-card gap-2">
+      {/* Settings Tabs - Matching the reference design */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className="bg-muted/30 p-1 h-auto flex-wrap">
+          <TabsTrigger value="general" className="data-[state=active]:bg-card data-[state=active]:shadow-sm gap-2">
             <Building2 className="h-4 w-4" />
-            Organizations
+            General
           </TabsTrigger>
-          <TabsTrigger value="roles" className="data-[state=active]:bg-card gap-2">
-            <Shield className="h-4 w-4" />
-            Roles
+          <TabsTrigger value="users" className="data-[state=active]:bg-card data-[state=active]:shadow-sm gap-2">
+            <Users className="h-4 w-4" />
+            Users & Admins
+          </TabsTrigger>
+          <TabsTrigger value="website" className="data-[state=active]:bg-card data-[state=active]:shadow-sm gap-2">
+            <Globe className="h-4 w-4" />
+            Website
+          </TabsTrigger>
+          <TabsTrigger value="financial" className="data-[state=active]:bg-card data-[state=active]:shadow-sm gap-2">
+            <CreditCard className="h-4 w-4" />
+            Financial
+          </TabsTrigger>
+          <TabsTrigger value="communications" className="data-[state=active]:bg-card data-[state=active]:shadow-sm gap-2">
+            <Mail className="h-4 w-4" />
+            Communications
+          </TabsTrigger>
+          <TabsTrigger value="import" className="data-[state=active]:bg-card data-[state=active]:shadow-sm gap-2">
+            <FileDown className="h-4 w-4" />
+            Import
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="profile">
-          <ProfileTab />
+        <TabsContent value="general">
+          <GeneralTab />
         </TabsContent>
 
-        <TabsContent value="organizations">
-          <OrganizationsTab />
+        <TabsContent value="users">
+          <UsersAdminsTab />
         </TabsContent>
 
-        <TabsContent value="roles">
-          <RolesTab />
+        <TabsContent value="website">
+          <WebsiteTab />
+        </TabsContent>
+
+        <TabsContent value="financial">
+          <FinancialTab />
+        </TabsContent>
+
+        <TabsContent value="communications">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center py-12 text-muted-foreground"
+          >
+            <Mail className="h-12 w-12 mx-auto mb-4 opacity-30" />
+            <p className="font-medium">Communications Settings</p>
+            <p className="text-sm">Coming soon - Email & SMS configuration</p>
+          </motion.div>
+        </TabsContent>
+
+        <TabsContent value="import">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center py-12 text-muted-foreground"
+          >
+            <FileDown className="h-12 w-12 mx-auto mb-4 opacity-30" />
+            <p className="font-medium">Import & Export</p>
+            <p className="text-sm">Coming soon - CSV import and data export</p>
+          </motion.div>
         </TabsContent>
       </Tabs>
     </DashboardLayout>
