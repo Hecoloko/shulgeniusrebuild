@@ -16,6 +16,7 @@ interface AuthContextType {
   loading: boolean;
   roles: UserRole[];
   isShulowner: boolean;
+  isShuladmin: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -30,6 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<UserRole[]>([]);
 
   const isShulowner = roles.some((r) => r.role === "shulowner");
+  const isShuladmin = roles.some((r) => r.role === "shuladmin");
 
   useEffect(() => {
     // Set up auth state listener FIRST
@@ -106,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         roles,
         isShulowner,
+        isShuladmin,
         signIn,
         signUp,
         signOut,
