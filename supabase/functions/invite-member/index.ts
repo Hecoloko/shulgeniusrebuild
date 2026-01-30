@@ -27,7 +27,7 @@ serve(async (req) => {
         }
 
         const { memberId, origin: requestOrigin } = await req.json();
-        const origin = requestOrigin || "https://shulgenius.com"; // Fallback
+        const origin = requestOrigin || "https://shulgenius-rebuild.vercel.app"; // Fallback
 
         if (!memberId) {
             return new Response(

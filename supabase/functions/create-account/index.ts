@@ -149,7 +149,7 @@ serve(async (req) => {
 
     // 6. Send welcome email via our send-email Edge Function
     // Dynamic URL logic: uses request origin or PUBLIC_URL secret
-    const origin = req.headers.get("origin") || "http://localhost:8080";
+    const origin = req.headers.get("origin") || "https://shulgenius-rebuild.vercel.app";
     const baseUrl = Deno.env.get("PUBLIC_URL") || origin;
 
     // Explicitly point to /login for the dashboard link
