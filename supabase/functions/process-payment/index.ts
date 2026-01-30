@@ -51,8 +51,8 @@ serve(async (req) => {
 
     if (!subscriptionId || !memberId || !organizationId || !amount) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ success: false, error: "Missing required fields" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -71,15 +71,15 @@ serve(async (req) => {
 
     if (subError || !subscription) {
       return new Response(
-        JSON.stringify({ error: "Subscription not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ success: false, error: "Subscription not found" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     if (!subscription.payment_method_id || !subscription.payment_methods) {
       return new Response(
-        JSON.stringify({ error: "No payment method linked to this subscription" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ success: false, error: "No payment method linked to this subscription" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -105,8 +105,8 @@ serve(async (req) => {
 
       if (processorError || !processor) {
         return new Response(
-          JSON.stringify({ error: "Payment processor not found" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ success: false, error: "Payment processor not found" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -123,8 +123,8 @@ serve(async (req) => {
 
       if (settingsError || !settings?.cardknox_transaction_key) {
         return new Response(
-          JSON.stringify({ error: "Payment processor not configured" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ success: false, error: "Payment processor not configured" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -133,8 +133,8 @@ serve(async (req) => {
 
     if (!transactionKey) {
       return new Response(
-        JSON.stringify({ error: "Payment processor credentials not configured" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ success: false, error: "Payment processor credentials not configured" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -150,7 +150,8 @@ serve(async (req) => {
     const campaignName = (subscription.campaigns as { name: string } | null)?.name || "Subscription";
 
     // Process payment via Cardknox cc:sale
-    const paymentData = new URLSearchParams({
+    // Process payment via Cardknox cc:sale
+    const paymentData = {
       xKey: transactionKey,
       xVersion: "5.0.0",
       xSoftwareName: "ShulGenius",
@@ -161,26 +162,29 @@ serve(async (req) => {
       xInvoice: invoiceNumber,
       xDescription: description || `${campaignName} - Subscription billing`,
       xEmail: member?.email || "",
-    });
+    };
 
     console.log("Processing payment via Cardknox cc:sale");
     const response = await fetch("https://x1.cardknox.com/gatewayjson", {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: paymentData.toString(),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(paymentData),
     });
 
     const result = await response.json();
-    console.log("Cardknox payment response:", result);
+    console.log("Cardknox payment response: " + JSON.stringify(result));
 
     if (result.xResult !== "A") {
+      const errorMessage = String(result.xError || "Payment declined");
+      console.error("Cardknox declined:", errorMessage);
       return new Response(
-        JSON.stringify({ 
-          error: result.xError || "Payment declined",
-          declineReason: result.xError,
-          result: result.xResult 
+        JSON.stringify({
+          success: false,
+          error: errorMessage,
+          declineReason: errorMessage,
+          result: String(result.xResult)
         }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -295,8 +299,8 @@ serve(async (req) => {
   } catch (err) {
     console.error("Unexpected error:", err);
     return new Response(
-      JSON.stringify({ error: "An unexpected error occurred" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ success: false, error: "An unexpected error occurred: " + (err.message || String(err)) }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

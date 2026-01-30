@@ -20,6 +20,8 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { AddCardModal } from "@/components/members/AddCardModal";
+import { DonateModal } from "@/components/campaigns/DonateModal";
 
 type PortalTab = "home" | "invoices" | "cards" | "schedule" | "donate";
 
@@ -28,6 +30,9 @@ export default function MemberPortal() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<PortalTab>("home");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [selectedMembershipId, setSelectedMembershipId] = useState<string | null>(null);
+  const [showAddCard, setShowAddCard] = useState(false);
+  const [selectedDonationCampaign, setSelectedDonationCampaign] = useState<any>(null);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -41,7 +46,7 @@ export default function MemberPortal() {
     queryKey: ["member-memberships", user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
-      
+
       const { data, error } = await supabase
         .from("members")
         .select(`
@@ -59,16 +64,25 @@ export default function MemberPortal() {
           )
         `)
         .eq("user_id", user.id);
-      
+
       if (error) throw error;
       return data || [];
     },
     enabled: !!user?.id,
   });
 
-  // Use first membership as default
-  const currentMember = memberships?.[0];
+  // Use selected membership or first membership as default
+  const currentMember = selectedMembershipId
+    ? memberships?.find(m => m.id === selectedMembershipId)
+    : memberships?.[0];
   const currentOrg = currentMember?.organizations;
+
+  // Set initial selection when memberships load
+  useEffect(() => {
+    if (memberships && memberships.length > 0 && !selectedMembershipId) {
+      setSelectedMembershipId(memberships[0].id);
+    }
+  }, [memberships, selectedMembershipId]);
 
   // Fetch invoices for current member
   const { data: invoices } = useQuery({
@@ -86,7 +100,22 @@ export default function MemberPortal() {
     enabled: !!currentMember?.id,
   });
 
-  // Fetch payment methods for current member
+  // Fetch payments for current member
+  const { data: payments } = useQuery({
+    queryKey: ["member-payments", currentMember?.id],
+    queryFn: async () => {
+      if (!currentMember?.id) return [];
+      const { data, error } = await supabase
+        .from("payments")
+        .select("*")
+        .eq("member_id", currentMember.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!currentMember?.id,
+  });
+
   const { data: paymentMethods } = useQuery({
     queryKey: ["member-payment-methods", currentMember?.id],
     queryFn: async () => {
@@ -108,7 +137,18 @@ export default function MemberPortal() {
       if (!currentOrg?.id) return [];
       const { data, error } = await supabase
         .from("campaigns")
-        .select("*")
+        .select(`
+          *,
+          campaign_processors(
+            processor_id,
+            is_primary,
+            processor:payment_processors(
+              id,
+              name,
+              processor_type
+            )
+          )
+        `)
         .eq("organization_id", currentOrg.id)
         .eq("is_active", true);
       if (error) throw error;
@@ -116,6 +156,11 @@ export default function MemberPortal() {
     },
     enabled: !!currentOrg?.id,
   });
+
+  // Calculate dynamic balance
+  const totalInvoiced = invoices?.reduce((sum, inv) => sum + (inv.total || 0), 0) || 0;
+  const totalPaid = payments?.reduce((sum, pmt) => sum + (pmt.amount || 0), 0) || 0;
+  const calculatedBalance = Math.max(0, totalInvoiced - totalPaid);
 
   const handleSignOut = async () => {
     await signOut();
@@ -229,7 +274,11 @@ export default function MemberPortal() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent>
                     {memberships.map((m: any) => (
-                      <DropdownMenuItem key={m.id}>
+                      <DropdownMenuItem
+                        key={m.id}
+                        onClick={() => setSelectedMembershipId(m.id)}
+                        className={selectedMembershipId === m.id ? "bg-muted" : ""}
+                      >
                         {m.organizations?.name}
                       </DropdownMenuItem>
                     ))}
@@ -295,11 +344,10 @@ export default function MemberPortal() {
                       setActiveTab(item.id as PortalTab);
                       setMobileMenuOpen(false);
                     }}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      activeTab === item.id
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted"
-                    }`}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === item.id
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted"
+                      }`}
                   >
                     <item.icon className="h-4 w-4" />
                     {item.label}
@@ -341,11 +389,11 @@ export default function MemberPortal() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className={`text-3xl font-bold ${currentMember.balance > 0 ? "text-destructive" : "text-success"}`}>
-                      {formatCurrency(currentMember.balance)}
+                    <p className={`text-3xl font-bold ${calculatedBalance > 0 ? "text-destructive" : "text-success"}`}>
+                      {formatCurrency(calculatedBalance)}
                     </p>
                     <p className="text-sm text-muted-foreground mt-1">
-                      {currentMember.balance > 0 ? "Amount due" : "Paid in full"}
+                      {calculatedBalance > 0 ? "Amount due" : "Paid in full"}
                     </p>
                   </CardContent>
                 </Card>
@@ -434,8 +482,8 @@ export default function MemberPortal() {
                                 invoice.status === "paid"
                                   ? "default"
                                   : invoice.status === "overdue"
-                                  ? "destructive"
-                                  : "secondary"
+                                    ? "destructive"
+                                    : "secondary"
                               }
                             >
                               {invoice.status}
@@ -579,7 +627,13 @@ export default function MemberPortal() {
                             </div>
                           </div>
                         )}
-                        <Button className="mt-4 bg-gold text-foreground hover:bg-gold/90">
+                        <Button
+                          className="mt-4 bg-gold text-foreground hover:bg-gold/90"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedDonationCampaign(campaign);
+                          }}
+                        >
                           Donate Now
                         </Button>
                       </CardContent>
@@ -608,6 +662,25 @@ export default function MemberPortal() {
           <p>© {new Date().getFullYear()} {currentOrg?.name}. Powered by ShulGenius.</p>
         </div>
       </footer>
+      {/* Add Card Modal */}
+      <AddCardModal
+        open={showAddCard}
+        onOpenChange={setShowAddCard}
+        member={currentMember || null}
+      />
+
+      {/* Donate Modal */}
+      <DonateModal
+        campaign={selectedDonationCampaign}
+        open={!!selectedDonationCampaign}
+        onOpenChange={(open) => !open && setSelectedDonationCampaign(null)}
+        memberId={currentMember?.id}
+        initialMemberData={currentMember ? {
+          first_name: currentMember.first_name,
+          last_name: currentMember.last_name,
+          email: currentMember.email
+        } : undefined}
+      />
     </div>
   );
 }

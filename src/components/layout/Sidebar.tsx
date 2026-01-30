@@ -14,9 +14,10 @@ import {
   Building2,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCurrentOrg } from "@/hooks/useCurrentOrg";
 
 const navigation = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Members", href: "/members", icon: Users },
   { name: "Invoices", href: "/invoices", icon: FileText },
   { name: "Campaigns", href: "/campaigns", icon: Heart },
@@ -26,7 +27,8 @@ const navigation = [
 export const Sidebar = forwardRef<HTMLElement>((_, ref) => {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
-  const { signOut, user, isShulowner } = useAuth();
+  const { signOut, user, isShulowner: isAdmin } = useAuth();
+  const { orgName, isLoading: loadingOrg, isShulowner } = useCurrentOrg();
 
   const handleSignOut = async () => {
     await signOut();
@@ -56,12 +58,11 @@ export const Sidebar = forwardRef<HTMLElement>((_, ref) => {
               </div>
               <div>
                 <h1 className="text-lg font-bold text-sidebar-foreground">ShulGenius</h1>
-                <p className="text-xs text-sidebar-foreground/60">Antigravity</p>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
-        
+
         {collapsed && (
           <motion.div
             initial={{ scale: 0.8, opacity: 0 }}
@@ -76,7 +77,7 @@ export const Sidebar = forwardRef<HTMLElement>((_, ref) => {
       {/* Organization Badge */}
       <div className="px-4 py-4">
         <motion.div
-          animate={{ 
+          animate={{
             paddingLeft: collapsed ? 12 : 16,
             paddingRight: collapsed ? 12 : 16,
           }}
@@ -92,7 +93,7 @@ export const Sidebar = forwardRef<HTMLElement>((_, ref) => {
                 className="overflow-hidden"
               >
                 <p className="text-sm font-medium text-sidebar-foreground truncate">
-                  {isShulowner ? "Platform Owner" : "Beth Israel"}
+                  {loadingOrg ? "Loading..." : (orgName || (isShulowner ? "Platform Owner" : "ShulGenius"))}
                 </p>
                 <p className="text-xs text-sidebar-foreground/60">
                   {isShulowner ? "Shulowner" : "Admin Portal"}

@@ -75,7 +75,7 @@ serve(async (req) => {
       .replace(/\s+/g, "-")
       .replace(/-+/g, "-")
       .slice(0, 30);
-    
+
     const slug = `${baseSlug}-${Date.now().toString(36)}`;
 
     // 3. Create the organization
@@ -118,6 +118,27 @@ serve(async (req) => {
       );
     }
 
+    // 4.5. Create a member record for the admin (so they exist in the member portal too)
+    const [firstName, ...lastNameParts] = (shulName || "Admin").split(" ");
+    const lastName = lastNameParts.join(" ") || "Admin";
+
+    const { error: memberError } = await supabaseAdmin
+      .from("members")
+      .insert({
+        user_id: userId,
+        organization_id: org.id,
+        email: email,
+        first_name: firstName,
+        last_name: lastName || "User",
+        is_active: true,
+        balance: 0,
+      });
+
+    if (memberError) {
+      console.error("Member creation error (non-fatal):", memberError);
+      // We don't fail the whole signup if member record fails, but it's important for the portal
+    }
+
     // 5. Create organization settings with defaults
     await supabaseAdmin
       .from("organization_settings")
@@ -126,68 +147,34 @@ serve(async (req) => {
         active_processor: "stripe",
       });
 
-    // 6. Send welcome email via Resend
-    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-    if (RESEND_API_KEY) {
-      try {
-        const emailRes = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${RESEND_API_KEY}`,
-          },
-          body: JSON.stringify({
-            from: "ShulGenius <noreply@shulgenius.com>",
-            to: [email],
-            subject: `Welcome to ShulGenius - ${org.name} is Ready!`,
-            html: `
-              <!DOCTYPE html>
-              <html>
-              <head>
-                <style>
-                  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; color: #333; }
-                  .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                  .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0; }
-                  .content { background: #fff; padding: 30px; border: 1px solid #e5e5e5; border-top: none; border-radius: 0 0 12px 12px; }
-                  .cta { display: inline-block; background: #d4af37; color: #1a1a2e; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; }
-                  h1 { margin: 0; font-size: 24px; }
-                </style>
-              </head>
-              <body>
-                <div class="container">
-                  <div class="header">
-                    <div style="font-size: 32px; margin-bottom: 10px;">✡️</div>
-                    <h1>Welcome to ShulGenius!</h1>
-                  </div>
-                  <div class="content">
-                    <p>Mazal Tov! Your shul <strong>${org.name}</strong> has been successfully created.</p>
-                    <p>You now have access to powerful tools to manage your congregation:</p>
-                    <ul>
-                      <li>📊 <strong>Dashboard</strong> - Track donations and member activity</li>
-                      <li>👥 <strong>Members</strong> - Manage your congregation</li>
-                      <li>💳 <strong>Payments</strong> - Process dues and donations</li>
-                      <li>📨 <strong>Invoices</strong> - Create professional invoices</li>
-                    </ul>
-                    <p style="text-align: center; margin-top: 20px;">
-                      <a href="${Deno.env.get("SUPABASE_URL")?.replace('.supabase.co', '.lovable.app') || 'https://shulgenius.com'}" class="cta">Go to Dashboard →</a>
-                    </p>
-                    <p>B'hatzlacha,<br>The ShulGenius Team</p>
-                  </div>
-                </div>
-              </body>
-              </html>
-            `,
-          }),
-        });
-        
-        if (emailRes.ok) {
-          console.log("Welcome email sent to:", email);
-        } else {
-          console.error("Failed to send welcome email:", await emailRes.text());
-        }
-      } catch (emailErr) {
-        console.error("Error sending welcome email:", emailErr);
-      }
+    // 6. Send welcome email via our send-email Edge Function
+    // Dynamic URL logic: uses request origin or PUBLIC_URL secret
+    const origin = req.headers.get("origin") || "http://localhost:8080";
+    const baseUrl = Deno.env.get("PUBLIC_URL") || origin;
+
+    // Explicitly point to /login for the dashboard link
+    const dashboardUrl = `${baseUrl.replace(/\/$/, "")}/login`;
+    const publicPageUrl = `${baseUrl.replace(/\/$/, "")}/s/${org.slug}`;
+
+    try {
+      await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-email`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+        },
+        body: JSON.stringify({
+          type: "welcome_shul",
+          to: email,
+          shulName: org.name,
+          portalUrl: dashboardUrl,
+          publicPageUrl: publicPageUrl,
+        }),
+      });
+      console.log("Welcome email request sent via send-email function");
+    } catch (emailErr) {
+      console.error("Error triggering welcome email:", emailErr);
+      // Don't fail the registration if email fails
     }
 
     console.log(`New shuladmin created: ${email} with org: ${org.name}`);

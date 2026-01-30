@@ -104,7 +104,6 @@ export function AddCardModal({ member, open, onOpenChange }: AddCardModalProps) 
     return value;
   };
 
-  // Format expiry as MM/YY
   const formatExpiry = (value: string) => {
     const v = value.replace(/\s+/g, "").replace(/[^0-9]/gi, "");
     if (v.length >= 2) {
@@ -112,6 +111,17 @@ export function AddCardModal({ member, open, onOpenChange }: AddCardModalProps) 
     }
     return v;
   };
+
+  const getCardBrand = (number: string) => {
+    const v = number.replace(/\s+/g, "");
+    if (v.startsWith("4")) return "visa";
+    if (/^5[1-5]/.test(v)) return "mastercard";
+    if (/^3[47]/.test(v)) return "amex";
+    if (/^6(?:011|5)/.test(v)) return "discover";
+    return "unknown";
+  };
+
+  const cardBrand = getCardBrand(cardNumber);
 
   const handleSaveCard = async () => {
     if (!member || !orgId || !selectedProcessorId) {
@@ -249,7 +259,13 @@ export function AddCardModal({ member, open, onOpenChange }: AddCardModalProps) 
                   maxLength={19}
                   className="pr-10"
                 />
-                <CreditCard className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  {cardBrand === "visa" && <img src="https://upload.wikimedia.org/wikipedia/commons/d/d6/Visa_2021.svg" className="h-4 w-auto" alt="Visa" />}
+                  {cardBrand === "mastercard" && <img src="https://upload.wikimedia.org/wikipedia/commons/2/2a/Mastercard-logo.svg" className="h-6 w-auto" alt="Mastercard" />}
+                  {cardBrand === "amex" && <img src="https://upload.wikimedia.org/wikipedia/commons/3/30/American_Express_logo.svg" className="h-6 w-auto" alt="Amex" />}
+                  {cardBrand === "discover" && <img src="https://upload.wikimedia.org/wikipedia/commons/5/57/Discover_Card_logo.svg" className="h-4 w-auto" alt="Discover" />}
+                  {cardBrand === "unknown" && <CreditCard className="h-4 w-4 text-muted-foreground" />}
+                </div>
               </div>
             </div>
 

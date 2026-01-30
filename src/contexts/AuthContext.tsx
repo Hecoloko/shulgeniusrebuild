@@ -42,37 +42,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(newSession?.user ?? null);
 
       if (newSession?.user) {
-        // Fetch user roles
-        setTimeout(async () => {
+        // Fetch user roles and WAIT before setting loading to false
+        const fetchUserRoles = async () => {
           const { data: userRoles } = await supabase
             .from("user_roles")
             .select("id, role, organization_id")
             .eq("user_id", newSession.user.id);
 
           setRoles((userRoles as UserRole[]) || []);
-        }, 0);
+          setLoading(false);
+        };
+        fetchUserRoles();
       } else {
         setRoles([]);
+        setLoading(false);
       }
-      
-      setLoading(false);
     });
 
     // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
+    supabase.auth.getSession().then(async ({ data: { session: existingSession } }) => {
       setSession(existingSession);
       setUser(existingSession?.user ?? null);
-      
+
       if (existingSession?.user) {
-        supabase
+        const { data: userRoles } = await supabase
           .from("user_roles")
           .select("id, role, organization_id")
-          .eq("user_id", existingSession.user.id)
-          .then(({ data: userRoles }) => {
-            setRoles((userRoles as UserRole[]) || []);
-          });
+          .eq("user_id", existingSession.user.id);
+
+        setRoles((userRoles as UserRole[]) || []);
+      } else {
+        setRoles([]);
       }
-      
+
       setLoading(false);
     });
 

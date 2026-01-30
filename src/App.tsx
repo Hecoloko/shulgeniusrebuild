@@ -11,12 +11,15 @@ import MemberDetail from "./pages/MemberDetail";
 import Invoices from "./pages/Invoices";
 import Campaigns from "./pages/Campaigns";
 import Settings from "./pages/Settings";
+import Landing from "./pages/Landing";
 import Login from "./pages/Login";
+import SignupSuccess from "./pages/SignupSuccess";
 import PublicShul from "./pages/PublicShul";
 import PublicCampaign from "./pages/PublicCampaign";
 import MemberPortal from "./pages/MemberPortal";
 import MemberLogin from "./pages/MemberLogin";
 import MemberSetupPassword from "./pages/MemberSetupPassword";
+import MemberAcceptInvite from "./pages/MemberAcceptInvite";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +33,7 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/signup-success" element={<SignupSuccess />} />
             {/* Public Shul Page */}
             <Route path="/s/:slug" element={<PublicShul />} />
             {/* Public Campaign Page */}
@@ -38,8 +42,10 @@ const App = () => (
             <Route path="/portal" element={<MemberPortal />} />
             <Route path="/portal/login" element={<MemberLogin />} />
             <Route path="/portal/setup" element={<MemberSetupPassword />} />
+            <Route path="/portal/accept-invite" element={<MemberAcceptInvite />} />
+            <Route path="/" element={<Landing />} />
             <Route
-              path="/"
+              path="/dashboard"
               element={
                 <ProtectedRoute>
                   <Dashboard />

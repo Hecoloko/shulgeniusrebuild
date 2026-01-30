@@ -80,7 +80,7 @@ export function AddSubscriptionModal({ member, open, onOpenChange }: AddSubscrip
   // Filter payment methods by campaign's processor(s)
   const filteredPaymentMethods = useMemo(() => {
     if (!paymentMethods) return [];
-    
+
     // If no campaign selected or campaign has no specific processors, show all cards
     if (!campaignId || !campaignProcessorIds || campaignProcessorIds.length === 0) {
       return paymentMethods;
@@ -313,7 +313,10 @@ export function AddSubscriptionModal({ member, open, onOpenChange }: AddSubscrip
                           <div className="flex items-center gap-2">
                             <CreditCard className="h-4 w-4" />
                             <span>
-                              {pm.card_brand} •••• {pm.card_last_four}
+                              {pm.nickname && <span className="font-medium mr-1">{pm.nickname}</span>}
+                              <span className={cn(pm.nickname && "text-muted-foreground")}>
+                                {pm.card_brand} •••• {pm.card_last_four}
+                              </span>
                               {processorName && <span className="text-muted-foreground ml-1">({processorName})</span>}
                               {pm.is_default && <span className="text-muted-foreground ml-1">(Default)</span>}
                             </span>
@@ -369,9 +372,9 @@ export function AddSubscriptionModal({ member, open, onOpenChange }: AddSubscrip
           <Button
             onClick={() => createSubscriptionMutation.mutate()}
             disabled={
-              createSubscriptionMutation.isPending || 
-              !campaignId || 
-              !totalAmount || 
+              createSubscriptionMutation.isPending ||
+              !campaignId ||
+              !totalAmount ||
               noCardsForCampaign ||
               (billingMethod === "auto_cc" && filteredPaymentMethods.length === 0)
             }

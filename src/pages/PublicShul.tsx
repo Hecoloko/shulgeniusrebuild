@@ -9,12 +9,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PublicNavbar } from "@/components/public/PublicNavbar";
+import { DonateModal } from "@/components/campaigns/DonateModal";
 
 type TabType = "home" | "schedule" | "donate";
 
 export default function PublicShul() {
   const { slug } = useParams<{ slug: string }>();
   const [activeTab, setActiveTab] = useState<TabType>("home");
+  const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
 
   // Fetch organization by slug
   const { data: org, isLoading, error } = useQuery({
@@ -39,7 +41,18 @@ export default function PublicShul() {
       if (!org?.id) return [];
       const { data, error } = await supabase
         .from("campaigns")
-        .select("*")
+        .select(`
+          *,
+          campaign_processors(
+            processor_id,
+            is_primary,
+            processor:payment_processors(
+              id,
+              name,
+              processor_type
+            )
+          )
+        `)
         .eq("organization_id", org.id)
         .eq("is_active", true)
         .order("created_at", { ascending: false });
@@ -83,10 +96,10 @@ export default function PublicShul() {
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-accent/20 via-background to-background">
       {/* Navigation */}
-      <PublicNavbar 
-        org={org} 
-        activeTab={activeTab} 
-        onTabChange={(tab) => setActiveTab(tab as TabType)} 
+      <PublicNavbar
+        org={org}
+        activeTab={activeTab}
+        onTabChange={(tab) => setActiveTab(tab as TabType)}
       />
 
       {/* Mobile Nav */}
@@ -96,11 +109,10 @@ export default function PublicShul() {
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id as TabType)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
-                activeTab === item.id
-                  ? "bg-foreground text-background"
-                  : "text-muted-foreground bg-muted"
-              }`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${activeTab === item.id
+                ? "bg-foreground text-background"
+                : "text-muted-foreground bg-muted"
+                }`}
             >
               <item.icon className="h-4 w-4" />
               {item.label}
@@ -220,7 +232,8 @@ export default function PublicShul() {
                 {campaigns.map((campaign) => (
                   <div
                     key={campaign.id}
-                    className="p-6 rounded-xl border bg-background hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={() => setSelectedCampaign(campaign)}
+                    className="p-6 rounded-xl border bg-background hover:shadow-md transition-shadow cursor-pointer group"
                   >
                     <div className="flex items-center justify-between">
                       <div>
@@ -272,6 +285,13 @@ export default function PublicShul() {
             )}
           </motion.div>
         )}
+
+        {/* Donate Modal */}
+        <DonateModal
+          campaign={selectedCampaign}
+          open={!!selectedCampaign}
+          onOpenChange={(open) => !open && setSelectedCampaign(null)}
+        />
       </main>
 
       {/* Footer */}

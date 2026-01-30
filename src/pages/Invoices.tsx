@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
+import { Badge } from "@/components/ui/badge";
 import { CreateInvoiceModal } from "@/components/invoices/CreateInvoiceModal";
 import { InvoiceDetailModal } from "@/components/invoices/InvoiceDetailModal";
 
@@ -60,16 +61,19 @@ export default function Invoices() {
     enabled: !!orgId,
   });
 
-  // Fetch billing items (subscriptions)
+  // Fetch active subscriptions with member and campaign info
   const { data: billingItems, isLoading: billingLoading } = useQuery({
-    queryKey: ["billing-items-list", orgId],
+    queryKey: ["subscriptions-list", orgId],
     queryFn: async () => {
       if (!orgId) return [];
       const { data, error } = await supabase
-        .from("billing_items")
-        .select("*")
+        .from("subscriptions")
+        .select(`
+          *,
+          member:members(first_name, last_name, email),
+          campaign:campaigns(name)
+        `)
         .eq("organization_id", orgId)
-        .eq("type", "subscription")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data || [];
@@ -138,25 +142,25 @@ export default function Invoices() {
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="bg-transparent border-b border-border rounded-none h-auto p-0 mb-6">
-            <TabsTrigger 
-              value="invoices" 
+            <TabsTrigger
+              value="invoices"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-6 py-3"
             >
               INVOICES
             </TabsTrigger>
-            <TabsTrigger 
+            <TabsTrigger
               value="donations"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-6 py-3"
             >
               DONATIONS
             </TabsTrigger>
-            <TabsTrigger 
+            <TabsTrigger
               value="subscriptions"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-6 py-3"
             >
               SUBSCRIPTIONS
             </TabsTrigger>
-            <TabsTrigger 
+            <TabsTrigger
               value="line-items"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-6 py-3"
             >
@@ -203,8 +207,8 @@ export default function Invoices() {
                     </TableHeader>
                     <TableBody>
                       {invoices.map((invoice) => (
-                        <TableRow 
-                          key={invoice.id} 
+                        <TableRow
+                          key={invoice.id}
                           className="cursor-pointer hover:bg-muted/50"
                           onClick={() => setSelectedInvoice(invoice)}
                         >
@@ -276,7 +280,7 @@ export default function Invoices() {
                         <TableRow key={donation.id}>
                           <TableCell>{formatDate(donation.created_at)}</TableCell>
                           <TableCell>
-                            {donation.member 
+                            {donation.member
                               ? `${donation.member.first_name} ${donation.member.last_name?.charAt(0)}`
                               : donation.donor_name || "Anonymous"
                             }
@@ -326,21 +330,40 @@ export default function Invoices() {
                       <TableRow>
                         <TableHead>Member</TableHead>
                         <TableHead>Campaign</TableHead>
+                        <TableHead>Method</TableHead>
                         <TableHead>Amount</TableHead>
                         <TableHead>Frequency</TableHead>
+                        <TableHead>Next Bill</TableHead>
                         <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {billingItems.map((item) => (
+                      {billingItems.map((item: any) => (
                         <TableRow key={item.id}>
-                          <TableCell>-</TableCell>
-                          <TableCell>{item.name}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-medium">
+                                {item.member?.first_name} {item.member?.last_name}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {item.member?.email}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>{item.campaign?.name || "General"}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="capitalize">
+                              {item.billing_method?.replace("_", " ")}
+                            </Badge>
+                          </TableCell>
                           <TableCell className="font-mono">
-                            {formatCurrency(item.amount)}
+                            {formatCurrency(item.total_amount)}
                           </TableCell>
                           <TableCell className="capitalize">
-                            {item.billing_interval || "-"}
+                            {item.frequency || "-"}
+                          </TableCell>
+                          <TableCell>
+                            {item.next_billing_date ? formatDate(item.next_billing_date) : "-"}
                           </TableCell>
                           <TableCell>
                             <StatusBadge status={item.is_active ? "active" : "cancelled"} />

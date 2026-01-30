@@ -9,7 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
  */
 export function useCurrentOrg() {
   const { roles, isShulowner } = useAuth();
-  
+
   // Get org ID from user's roles (for shuladmin/shulmember)
   const orgIdFromRoles = roles?.find(r => r.organization_id)?.organization_id;
 
@@ -49,16 +49,18 @@ export function useCurrentOrg() {
   // Determine actual orgId and slug to use
   const orgId = orgIdFromRoles || firstOrg?.id || null;
   const orgSlug = orgFromRole?.slug || firstOrg?.slug || null;
-  
-  const isLoading = 
-    (!!orgIdFromRoles && loadingOrgFromRole) || 
+  const orgName = orgFromRole?.name || firstOrg?.name || null;
+
+  const isLoading =
+    (!!orgIdFromRoles && loadingOrgFromRole) ||
     (isShulowner && !orgIdFromRoles && loadingFirstOrg);
-  
+
   const noOrgExists = isShulowner && !orgIdFromRoles && !loadingFirstOrg && !firstOrg;
 
   return {
     orgId,
     orgSlug,
+    orgName,
     isLoading,
     isShulowner,
     noOrgExists,

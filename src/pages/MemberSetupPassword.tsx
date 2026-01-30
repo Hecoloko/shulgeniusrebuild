@@ -27,7 +27,7 @@ export default function MemberSetupPassword() {
   const [memberInfo, setMemberInfo] = useState<MemberInfo | null>(null);
   const [orgName, setOrgName] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
-  
+
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -40,8 +40,39 @@ export default function MemberSetupPassword() {
       return;
     }
 
-    verifyToken();
-  }, [token]);
+    const checkSessionAndVerify = async () => {
+      // Check if user is already logged in
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (session) {
+        try {
+          // Attempt to claim immediately
+          const { data: claimSuccess, error: claimError } = await supabase.rpc(
+            "claim_member_invite",
+            {
+              _token: token,
+              _user_id: session.user.id,
+            }
+          );
+
+          if (claimError) throw claimError;
+
+          if (claimSuccess) {
+            toast.success("Invitation accepted!");
+            navigate("/portal");
+            return;
+          }
+          // If false, maybe token is invalid or already used? verifyToken will check.
+        } catch (err) {
+          console.error("Auto-claim error:", err);
+        }
+      }
+
+      verifyToken();
+    };
+
+    checkSessionAndVerify();
+  }, [token, navigate]);
 
   const verifyToken = async () => {
     try {
@@ -98,49 +129,23 @@ export default function MemberSetupPassword() {
     setSubmitting(true);
 
     try {
-      // Create the user account using Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: memberInfo.email,
-        password,
-        options: {
-          emailRedirectTo: window.location.origin,
-          data: {
-            first_name: memberInfo.first_name,
-            last_name: memberInfo.last_name,
-          },
-        },
+      // Use the Edge Function for "Silent Signup" (prevents double emails)
+      const { data, error: funcError } = await supabase.functions.invoke("complete-invite-signup", {
+        body: { token, password }
       });
 
-      if (authError) throw authError;
-
-      if (!authData.user) {
-        throw new Error("Failed to create account");
+      if (funcError) {
+        throw new Error(funcError.message || "Failed to complete signup");
       }
 
-      // Update the member record with user_id and mark password as set
-      const { error: updateError } = await supabase
-        .from("members")
-        .update({
-          user_id: authData.user.id,
-          password_set_at: new Date().toISOString(),
-        })
-        .eq("id", memberInfo.id);
-
-      if (updateError) {
-        console.error("Failed to link member to user:", updateError);
+      if (data.error) {
+        throw new Error(data.error);
       }
 
-      // Create user role for this member using raw rpc call
-      const { error: roleError } = await supabase
-        .from("user_roles")
-        .insert({
-          user_id: authData.user.id,
-          role: "shulmember" as const,
-          organization_id: memberInfo.organization_id,
-        });
-
-      if (roleError && !roleError.message.includes("duplicate")) {
-        console.error("Failed to create role:", roleError);
+      // Automatically log the user in with the returned session
+      if (data.session) {
+        const { error: sessionError } = await supabase.auth.setSession(data.session);
+        if (sessionError) throw sessionError;
       }
 
       setSuccess(true);

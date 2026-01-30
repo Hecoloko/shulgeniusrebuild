@@ -9,10 +9,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PublicNavbar } from "@/components/public/PublicNavbar";
+import { DonateModal } from "@/components/campaigns/DonateModal";
 
 export default function PublicCampaign() {
   const { slug, campaignId } = useParams<{ slug: string; campaignId: string }>();
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+  const [showDonateModal, setShowDonateModal] = useState(false);
 
   // Fetch organization by slug
   const { data: org, isLoading: orgLoading } = useQuery({
@@ -37,7 +39,18 @@ export default function PublicCampaign() {
       if (!campaignId) return null;
       const { data, error } = await supabase
         .from("campaigns")
-        .select("*")
+        .select(`
+          *,
+          campaign_processors(
+            processor_id,
+            is_primary,
+            processor:payment_processors(
+              id,
+              name,
+              processor_type
+            )
+          )
+        `)
         .eq("id", campaignId)
         .maybeSingle();
       if (error) throw error;
@@ -66,15 +79,15 @@ export default function PublicCampaign() {
     if (!campaign?.end_date) return;
 
     const endDate = new Date(campaign.end_date);
-    
+
     const calculateTimeLeft = () => {
       const now = new Date();
       const diff = endDate.getTime() - now.getTime();
-      
+
       if (diff <= 0) {
         return { days: 0, hours: 0, minutes: 0, seconds: 0 };
       }
-      
+
       return {
         days: Math.floor(diff / (1000 * 60 * 60 * 24)),
         hours: Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
@@ -197,7 +210,7 @@ export default function PublicCampaign() {
             <CardContent className="py-6">
               <div className="text-center">
                 <Heart className="h-8 w-8 text-muted-foreground/50 mx-auto mb-3" />
-                
+
                 {hasEnded ? (
                   <>
                     <h3 className="text-xl font-semibold text-foreground mb-1">
@@ -244,13 +257,24 @@ export default function PublicCampaign() {
                 )}
 
                 {/* Donate Button */}
-                <Button size="lg" className="mt-6 w-full sm:w-auto px-12">
+                <Button
+                  size="lg"
+                  className="mt-6 w-full sm:w-auto px-12"
+                  onClick={() => setShowDonateModal(true)}
+                >
                   <Heart className="h-4 w-4 mr-2" />
                   Donate Now
                 </Button>
               </div>
             </CardContent>
           </Card>
+
+          {/* Donate Modal */}
+          <DonateModal
+            campaign={campaign}
+            open={showDonateModal}
+            onOpenChange={setShowDonateModal}
+          />
 
           {/* Description */}
           {campaign.description && (

@@ -1,0 +1,453 @@
+# ShulGenius Landing Page Codebase
+
+This file contains the complete codebase for the ShulGenius landing page. It is optimized for **Next.js** with **Tailwind CSS v4** and **Framer Motion**.
+
+## 🛠️ Prerequisites & Dependencies
+
+To use this codebase in a new project, ensure you have the following dependencies installed:
+
+```bash
+npm install framer-motion lucide-react three @react-three/fiber @react-three/drei clsx tailwind-merge
+```
+
+---
+
+## 🎨 Styles & Theme ([app/globals.css](file:///c:/Users/MSI%20CYBORG/Documents/Work/Shulgenius%20Nxt%20js/shulgenius-web/app/globals.css))
+
+This project uses **Tailwind CSS v4**. Copy this into your [globals.css](file:///c:/Users/MSI%20CYBORG/Documents/Work/Shulgenius%20Nxt%20js/shulgenius-web/app/globals.css).
+
+```css
+@import "tailwindcss";
+
+:root {
+  /* Religious Premium Palette (Warm Stone & Amber) */
+  --background: #FAFAF9;
+  --foreground: #1c1917;
+
+  /* Primary Brand - Deep Executive */
+  --primary: #1c1917;
+  --primary-foreground: #FAFAF9;
+
+  /* Secondary */
+  --secondary: #E7E5E4;
+  --secondary-foreground: #1c1917;
+
+  /* Accents - Gold/Amber */
+  --accent: #D97706;
+  --accent-foreground: #ffffff;
+
+  /* Custom Religious Theme Vars */
+  --color-religious-white: #FAFAF9;
+  --color-religious-accent: #D97706;
+
+  /* Surfaces */
+  --card: #ffffff;
+  --card-foreground: #1c1917;
+  --popover: #ffffff;
+  --popover-foreground: #1c1917;
+
+  /* Borders */
+  --border: #E7E5E4;
+  --input: #E7E5E4;
+  --ring: #D97706;
+
+  --radius: 0.75rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-xl: var(--radius);
+
+  /* Fonts */
+  --font-sans: var(--font-inter);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 3D Grid Animation Utilities */
+.perspective-container {
+  perspective: 1000px;
+  overflow: hidden;
+}
+
+.animate-grid-flow {
+  animation: grid-flow 20s linear infinite;
+}
+
+@keyframes grid-flow {
+  0% { transform: rotateX(60deg) translateY(0); }
+  100% { transform: rotateX(60deg) translateY(60px); }
+}
+
+/* Divine Light Animation */
+@keyframes radiance {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.1); }
+}
+
+.animate-radiance {
+  animation: radiance 8s ease-in-out infinite;
+}
+```
+
+---
+
+## 🚀 Main Page ([app/page.tsx](file:///c:/Users/MSI%20CYBORG/Documents/Work/Shulgenius%20Nxt%20js/shulgenius-web/app/page.tsx))
+
+```tsx
+import Navbar from "@/components/landing/Navbar";
+import Hero from "@/components/landing/Hero";
+import BackgroundGrid from "@/components/landing/BackgroundGrid";
+import TrustedBy from "@/components/landing/TrustedBy";
+import StatsStrip from "@/components/landing/StatsStrip";
+import FeatureGrid from "@/components/landing/FeatureGrid";
+import HowItWorks from "@/components/landing/HowItWorks";
+import Testimonials from "@/components/landing/Testimonials";
+import FAQ from "@/components/landing/FAQ";
+import CtaSection from "@/components/landing/CtaSection";
+
+export default function LandingPage() {
+  return (
+    <div className="min-h-screen bg-stone-50 font-sans selection:bg-amber-100 selection:text-amber-900 relative">
+      <BackgroundGrid />
+      <Navbar />
+      <main className="relative z-10">
+        <Hero />
+        <TrustedBy />
+        <StatsStrip />
+        <FeatureGrid />
+        <HowItWorks />
+        <Testimonials />
+        <FAQ />
+        <CtaSection />
+      </main>
+
+      <footer className="bg-stone-50 border-t border-stone-200 py-12 text-center text-stone-500 text-sm font-medium">
+        <p>© 2026 ShulGenius. Built with ❤️ for Klal Yisrael.</p>
+      </footer>
+    </div>
+  );
+}
+```
+
+---
+
+## 🎞️ Animations ([utils/animations.ts](file:///c:/Users/MSI%20CYBORG/Documents/Work/Shulgenius%20Nxt%20js/shulgenius-web/utils/animations.ts))
+
+```typescript
+export const fadeInUp = {
+    initial: { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.5, ease: "easeOut" }
+};
+
+export const fadeInScale = {
+    initial: { opacity: 0, scale: 0.95 },
+    animate: { opacity: 1, scale: 1 },
+    transition: { duration: 0.4, ease: "easeOut" }
+};
+
+export const staggerContainer = {
+    animate: {
+        transition: {
+            staggerChildren: 0.1,
+            delayChildren: 0.1
+        }
+    }
+};
+
+export const slideInRight = {
+    initial: { x: 20, opacity: 0 },
+    animate: { x: 0, opacity: 1 },
+    transition: { duration: 0.4, ease: "easeOut" }
+};
+```
+
+---
+
+## 🧊 Components
+
+### 🌌 BackgroundGrid ([components/landing/BackgroundGrid.tsx](file:///c:/Users/MSI%20CYBORG/Documents/Work/Shulgenius%20Nxt%20js/shulgenius-web/components/landing/BackgroundGrid.tsx))
+
+```tsx
+"use client";
+
+import React, { useRef, useMemo, useState, useEffect } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { useScroll, useTransform, motion as motion2d } from "framer-motion";
+import { Html } from "@react-three/drei";
+import { Church, Users, User, ArrowUp } from "lucide-react";
+import * as THREE from "three";
+
+// --- SHADER: Curved Horizon ---
+const CURVED_GRID_VERTEX = `
+  varying vec2 vUv;
+  varying float vDistance;
+  
+  uniform float uTime;
+  uniform float uScroll;
+  
+  void main() {
+    vUv = uv;
+    vec3 pos = position;
+    vec4 worldPos = modelMatrix * vec4(pos, 1.0);
+    vec4 viewPos = viewMatrix * worldPos; 
+    
+    float dist = length(viewPos.xz);
+    vDistance = dist;
+    
+    float curvature = 0.0005; 
+    worldPos.y -= dist * dist * curvature;
+    
+    gl_Position = projectionMatrix * viewMatrix * worldPos;
+  }
+`;
+
+const CURVED_GRID_FRAGMENT = `
+  varying vec2 vUv;
+  varying float vDistance;
+  uniform float uScroll;
+  
+  void main() {
+    float gridScale = 20.0;
+    vec2 gridUV = vUv * gridScale;
+    vec2 cell = fract(gridUV); 
+    float line = step(0.95, cell.x) + step(0.95, cell.y);
+    float alpha = max(0.0, 1.0 - vDistance * 0.015);
+    vec3 color = vec3(0.85, 0.47, 0.02); 
+    if (line < 0.1) discard; 
+    gl_FragColor = vec4(color, alpha * 0.4);
+  }
+`;
+
+const GRID_SIZE = 200;
+const FOG_DEPTH = 150;
+
+function CurvedGrid() {
+    const meshRef = useRef<THREE.Mesh>(null);
+    const { camera } = useThree();
+
+    const shaderMaterial = useMemo(() => {
+        return new THREE.ShaderMaterial({
+            vertexShader: CURVED_GRID_VERTEX,
+            fragmentShader: CURVED_GRID_FRAGMENT,
+            transparent: true,
+            side: THREE.DoubleSide,
+            uniforms: {
+                uTime: { value: 0 },
+                uScroll: { value: 0 }
+            }
+        });
+    }, []);
+
+    useFrame(() => {
+        if (meshRef.current) {
+            meshRef.current.position.z = camera.position.z;
+            meshRef.current.position.x = camera.position.x;
+        }
+    });
+
+    return (
+        <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -5, 0]}>
+            <planeGeometry args={[GRID_SIZE * 2, GRID_SIZE * 2, 48, 48]} />
+            <primitive object={shaderMaterial} />
+        </mesh>
+    );
+}
+
+function FloatingIcon({ initialPos, type }: { initialPos: [number, number, number], type: 'shul' | 'member' }) {
+    const ref = useRef<THREE.Group>(null);
+    const { camera } = useThree();
+    const [randomOffset] = useState(() => Math.random() * 100);
+    const zPos = useRef(initialPos[2]);
+
+    useFrame((state) => {
+        if (!ref.current) return;
+        ref.current.position.y = initialPos[1] + Math.sin(state.clock.getElapsedTime() + randomOffset) * 0.5;
+        const camZ = camera.position.z;
+        if (zPos.current > camZ + 20) {
+            zPos.current -= FOG_DEPTH * 1.5; 
+        } else if (zPos.current < camZ - FOG_DEPTH * 1.5) {
+            zPos.current += FOG_DEPTH * 1.5;
+        }
+        ref.current.position.z = zPos.current;
+    });
+
+    return (
+        <group ref={ref} position={[initialPos[0], initialPos[1], initialPos[2]]}>
+            <Html transform center pointerEvents="none" distanceFactor={15} zIndexRange={[100, 0]}>
+                <div className={`flex flex-col items-center justify-center`}>
+                    {type === 'shul' ? (
+                        <div className="relative group">
+                            <div className="bg-amber-100/30 p-4 rounded-full border border-amber-500/50">
+                                <Church className="w-12 h-12 text-amber-600" />
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="bg-stone-500/20 p-2 rounded-full border border-stone-500/30">
+                            <Users className="w-5 h-5 text-stone-500" />
+                        </div>
+                    )}
+                </div>
+            </Html>
+            <mesh position={[0, -10, 0]}>
+                <cylinderGeometry args={[0.02, 0.02, 20, 4]} />
+                <meshBasicMaterial color={type === 'shul' ? "#d97706" : "#57534e"} opacity={0.2} transparent />
+            </mesh>
+        </group>
+    );
+}
+
+function NetworkScene({ scrollY }: { scrollY: any }) {
+    const { camera } = useThree();
+    const objects = useMemo(() => {
+        const items: { pos: [number, number, number]; type: 'shul' | 'member' }[] = [];
+        for (let i = 0; i < 25; i++) {
+            items.push({
+                pos: [(Math.random() - 0.5) * 120, 0, -Math.random() * FOG_DEPTH] as [number, number, number],
+                type: Math.random() > 0.85 ? 'shul' : 'member'
+            });
+        }
+        return items;
+    }, []);
+
+    useFrame((state, delta) => {
+        const scrollVal = scrollY.get();
+        const targetZ = 20 - (scrollVal * 0.05);
+        camera.position.z = THREE.MathUtils.lerp(camera.position.z, targetZ, 0.08); 
+    });
+    return (
+        <group>
+            <CurvedGrid />
+            {objects.map((obj, i) => (
+                <FloatingIcon key={i} initialPos={obj.pos} type={obj.type} />
+            ))}
+        </group>
+    );
+}
+
+export default function BackgroundGrid() {
+    const { scrollY } = useScroll();
+    return (
+        <div className="fixed inset-0 z-0 pointer-events-none bg-stone-50">
+            <Canvas gl={{ antialias: false, alpha: true }} camera={{ position: [0, 8, 20], fov: 60, near: 0.1, far: 300 }}>
+                <fog attach="fog" args={['#fafaf9', 10, 100]} />
+                <NetworkScene scrollY={scrollY} />
+            </Canvas>
+        </div>
+    );
+}
+```
+
+### 🧭 Navbar ([components/landing/Navbar.tsx](file:///c:/Users/MSI%20CYBORG/Documents/Work/Shulgenius%20Nxt%20js/shulgenius-web/components/landing/Navbar.tsx))
+
+```tsx
+"use client";
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
+import { Menu, X } from "lucide-react";
+
+export default function Navbar() {
+    const [scrolled, setScrolled] = useState(false);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+    useEffect(() => {
+        const handleScroll = () => setScrolled(window.scrollY > 20);
+        window.addEventListener("scroll", handleScroll);
+        return () => window.removeEventListener("scroll", handleScroll);
+    }, []);
+
+    return (
+        <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? "bg-stone-50/90 backdrop-blur-md shadow-sm py-4" : "bg-transparent py-6"}`}>
+            <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
+                <Link href="/" className="flex items-center gap-2 group">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-600 to-amber-500 flex items-center justify-center text-white font-bold font-serif text-lg">S</div>
+                    <span className="text-xl font-bold font-serif tracking-tight text-stone-900">Shul<span className="text-amber-600">Genius</span></span>
+                </Link>
+                <nav className="hidden md:flex items-center gap-8">
+                    <NavLink href="#features">Features</NavLink>
+                    <NavLink href="#how-it-works">How it Works</NavLink>
+                    <NavLink href="#testimonials">Testimonials</NavLink>
+                    <Link href="/login" className="bg-stone-900 hover:bg-stone-800 text-white px-6 py-2.5 rounded-full font-medium transition-all shadow-lg">Sign In</Link>
+                </nav>
+                <button onClick={() => setMobileMenuOpen(true)} className="md:hidden text-stone-900"><Menu className="w-6 h-6" /></button>
+            </div>
+            {/* Mobile Menu implementation omitted for brevity, see original source */}
+        </header>
+    );
+}
+
+function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
+    return <Link href={href} className="text-sm font-medium transition-colors hover:text-amber-600 text-stone-700">{children}</Link>;
+}
+```
+
+### ✨ Hero ([components/landing/Hero.tsx](file:///c:/Users/MSI%20CYBORG/Documents/Work/Shulgenius%20Nxt%20js/shulgenius-web/components/landing/Hero.tsx))
+
+```tsx
+"use client";
+import { motion } from "framer-motion";
+import Link from "next/link";
+import { ArrowRight, CheckCircle, Menu, Users, CreditCard, Calendar } from "lucide-react";
+
+export default function Hero() {
+    return (
+        <section className="relative min-h-[90vh] flex items-center pt-20 overflow-hidden">
+            <div className="container relative z-20 max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-12 items-center">
+                <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+                    <div className="inline-flex items-center gap-2 bg-amber-500/10 text-amber-700 px-4 py-1.5 rounded-full text-sm font-semibold border border-amber-500/20">The Operating System for Modern Shuls</div>
+                    <h1 className="text-6xl md:text-7xl font-bold font-serif leading-[1.1] text-stone-900">Modern Tools for <br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-600 to-amber-500">Timeless Communities</span></h1>
+                    <p className="text-xl text-stone-600 leading-relaxed max-w-lg">Complete platform for member management, billing, and community engagement. Built for Gabbais who value time and tradition.</p>
+                    <div className="flex flex-col sm:flex-row gap-4 pt-2">
+                        <Link href="/login" className="bg-stone-900 hover:bg-stone-800 text-white px-8 py-4 rounded-full font-semibold text-lg flex items-center justify-center gap-2 shadow-xl">Get Started <ArrowRight className="w-5 h-5" /></Link>
+                    </div>
+                </motion.div>
+                {/* Dashboard Mockup code available in components/landing/Hero.tsx */}
+            </div>
+        </section>
+    );
+}
+```
+
+### 📈 FeatureGrid & Testimonials
+
+(Refer to the source files for complete implementation including variants and mapping)
+
+- **FeatureGrid**: Uses `staggerContainer` and `fadeInUp`.
+- **HowItWorks**: Shows 3 steps with vertical connector line on desktop.
+- **FAQ**: Uses `AnimatePresence` for accordions.
+- **CtaSection**: Dark themed gradient background with call to action.
+
+---
+
+## 📦 Component List
+
+Ensure you create these files in `components/landing/`:
+1. [Navbar.tsx](file:///c:/Users/MSI%20CYBORG/Documents/Work/Shulgenius%20Nxt%20js/shulgenius-web/components/landing/Navbar.tsx)
+2. [Hero.tsx](file:///c:/Users/MSI%20CYBORG/Documents/Work/Shulgenius%20Nxt%20js/shulgenius-web/components/landing/Hero.tsx)
+3. [BackgroundGrid.tsx](file:///c:/Users/MSI%20CYBORG/Documents/Work/Shulgenius%20Nxt%20js/shulgenius-web/components/landing/BackgroundGrid.tsx)
+4. [TrustedBy.tsx](file:///c:/Users/MSI%20CYBORG/Documents/Work/Shulgenius%20Nxt%20js/shulgenius-web/components/landing/TrustedBy.tsx)
+5. [StatsStrip.tsx](file:///c:/Users/MSI%20CYBORG/Documents/Work/Shulgenius%20Nxt%20js/shulgenius-web/components/landing/StatsStrip.tsx)
+6. [FeatureGrid.tsx](file:///c:/Users/MSI%20CYBORG/Documents/Work/Shulgenius%20Nxt%20js/shulgenius-web/components/landing/FeatureGrid.tsx)
+7. [HowItWorks.tsx](file:///c:/Users/MSI%20CYBORG/Documents/Work/Shulgenius%20Nxt%20js/shulgenius-web/components/landing/HowItWorks.tsx)
+8. [Testimonials.tsx](file:///c:/Users/MSI%20CYBORG/Documents/Work/Shulgenius%20Nxt%20js/shulgenius-web/components/landing/Testimonials.tsx)
+9. [FAQ.tsx](file:///c:/Users/MSI%20CYBORG/Documents/Work/Shulgenius%20Nxt%20js/shulgenius-web/components/landing/FAQ.tsx)
+10. [CtaSection.tsx](file:///c:/Users/MSI%20CYBORG/Documents/Work/Shulgenius%20Nxt%20js/shulgenius-web/components/landing/CtaSection.tsx)

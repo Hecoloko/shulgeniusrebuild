@@ -57,11 +57,10 @@ export function PublicNavbar({ org, activeTab, onTabChange }: PublicNavbarProps)
                 <button
                   key={item.id}
                   onClick={() => onTabChange(item.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                    activeTab === item.id
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${activeTab === item.id
                       ? "bg-foreground text-background"
                       : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                  }`}
+                    }`}
                 >
                   <item.icon className="h-4 w-4" />
                   {item.label}
@@ -102,7 +101,7 @@ export function PublicNavbar({ org, activeTab, onTabChange }: PublicNavbarProps)
             {/* Admin Portal - only for admins of this org */}
             {user && isOrgAdmin && (
               <Button variant="outline" asChild className="hidden sm:flex gap-2">
-                <Link to="/">
+                <Link to="/dashboard">
                   <Shield className="h-4 w-4" />
                   Admin
                 </Link>

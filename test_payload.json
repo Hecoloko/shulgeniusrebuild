@@ -1,0 +1,7 @@
+{
+    "type": "member_invite",
+    "to": "thebookkeepingnexus@gmail.com",
+    "shulName": "Test Shul",
+    "memberName": "Test User",
+    "setupUrl": "https://example.com/setup"
+}

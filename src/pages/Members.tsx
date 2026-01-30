@@ -18,20 +18,22 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function Members() {
   const { orgId, isLoading: orgLoading } = useCurrentOrg();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  
+
   const [search, setSearch] = useState("");
   const [addMemberOpen, setAddMemberOpen] = useState(false);
-  
+
   // New member form
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [sendInvite, setSendInvite] = useState(true);
 
   // Fetch members
   const { data: members, isLoading: membersLoading } = useQuery({
@@ -43,11 +45,11 @@ export default function Members() {
         .select("*")
         .eq("organization_id", orgId)
         .order("created_at", { ascending: false });
-      
+
       if (search) {
         query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`);
       }
-      
+
       const { data, error } = await query;
       if (error) throw error;
       return data || [];
@@ -92,7 +94,7 @@ export default function Members() {
     mutationFn: async () => {
       if (!orgId) throw new Error("No organization");
       if (!firstName || !lastName || !email) throw new Error("Name and email required");
-      
+
       const { data, error } = await supabase
         .from("members")
         .insert({
@@ -104,7 +106,7 @@ export default function Members() {
         })
         .select()
         .single();
-      
+
       if (error) throw error;
       return data;
     },
@@ -113,55 +115,46 @@ export default function Members() {
       toast.success("Member added successfully");
       setAddMemberOpen(false);
       resetMemberForm();
-      
+
       // Auto-create in Cardknox if configured
       if (settings?.cardknox_transaction_key) {
         createCardknoxCustomer(member);
       }
-      
-      // Send invite email
-      sendMemberInviteEmail(member);
+
+
+      // Send invite email if checked
+      if (sendInvite) {
+        sendMemberInviteEmail(member);
+      }
     },
     onError: (err: Error) => {
       toast.error("Failed: " + err.message);
     },
   });
 
-  // Send member invite email with password setup link
+  // Send member invite email (new or existing user)
   const sendMemberInviteEmail = async (member: any) => {
     try {
       if (!org) return;
-      
-      // Get the invite token from the member record
-      const { data: memberWithToken } = await supabase
-        .from("members")
-        .select("invite_token")
-        .eq("id", member.id)
-        .single();
-      
-      const setupUrl = memberWithToken?.invite_token 
-        ? `${window.location.origin}/portal/setup?token=${memberWithToken.invite_token}`
-        : null;
-      
-      const response = await supabase.functions.invoke("send-email", {
+
+      const response = await supabase.functions.invoke("invite-member", {
         body: {
-          type: "member_invite",
-          to: member.email,
-          shulName: org.name,
-          memberName: `${member.first_name} ${member.last_name}`,
-          setupUrl,
-          portalUrl: `${window.location.origin}/portal`,
-          adminEmail: org.email,
+          memberId: member.id,
+          origin: window.location.origin,
         },
       });
-      
+
       if (response.error) {
-        console.error("Email send error:", response.error);
+        console.error("Invite error:", response.error);
+        toast.error("Failed to send invite: " + response.error.message);
       } else {
-        toast.success("Invite email sent to " + member.email);
+        const { type } = response.data || {};
+        const isExisting = type === "existing_member_invite";
+        toast.success(isExisting ? "Invitation sent to existing user" : "Account setup email sent");
       }
     } catch (err) {
-      console.error("Email error:", err);
+      console.error("Invite error:", err);
+      toast.error("Failed to send invite");
     }
   };
 
@@ -170,7 +163,7 @@ export default function Members() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-      
+
       const response = await supabase.functions.invoke("cardknox-customer", {
         body: {
           action: "create_customer",
@@ -180,7 +173,7 @@ export default function Members() {
           memberName: `${member.first_name} ${member.last_name}`,
         },
       });
-      
+
       if (response.error) {
         console.error("Cardknox customer creation error:", response.error);
       } else {
@@ -196,6 +189,7 @@ export default function Members() {
     setLastName("");
     setEmail("");
     setPhone("");
+    setSendInvite(true);
   };
 
   const formatCurrency = (amount: number) => {
@@ -236,7 +230,7 @@ export default function Members() {
               Manage your congregation members and payment methods
             </p>
           </div>
-          
+
           <Dialog open={addMemberOpen} onOpenChange={setAddMemberOpen}>
             <DialogTrigger asChild>
               <Button className="btn-royal">
@@ -251,7 +245,7 @@ export default function Members() {
                   Add a new member to your congregation
                 </DialogDescription>
               </DialogHeader>
-              
+
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -273,7 +267,7 @@ export default function Members() {
                     />
                   </div>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="memberEmail">Email *</Label>
                   <Input
@@ -284,7 +278,7 @@ export default function Members() {
                     onChange={(e) => setEmail(e.target.value)}
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="memberPhone">Phone</Label>
                   <Input
@@ -294,8 +288,24 @@ export default function Members() {
                     onChange={(e) => setPhone(e.target.value)}
                   />
                 </div>
+
+                <div className="flex items-center space-x-2 pt-2">
+                  <Checkbox
+                    id="sendInvite"
+                    checked={sendInvite}
+                    onCheckedChange={(checked) => setSendInvite(checked as boolean)}
+                  />
+                  <Label
+                    htmlFor="sendInvite"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                  >
+                    Send invitation email
+                  </Label>
+                </div>
+
+
               </div>
-              
+
               <DialogFooter>
                 <Button variant="outline" onClick={() => setAddMemberOpen(false)}>
                   Cancel
@@ -379,7 +389,20 @@ export default function Members() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <ChevronRight className="h-4 w-4 text-muted-foreground inline" />
+                        <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                          {!member.user_id && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-gold hover:text-gold/80"
+                              onClick={() => sendMemberInviteEmail(member)}
+                            >
+                              <Mail className="h-4 w-4 mr-1" />
+                              Invite
+                            </Button>
+                          )}
+                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

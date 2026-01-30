@@ -9,15 +9,21 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, loading } = useAuth();
+  const { user, loading, isShulowner, isShuladmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
-    if (!loading && !user) {
-      navigate("/login", { state: { from: location }, replace: true });
+    if (!loading) {
+      if (!user) {
+        navigate("/login", { state: { from: location }, replace: true });
+      } else if (!isShulowner && !isShuladmin && location.pathname !== "/portal") {
+        // If logged in but not an admin/owner, redirect to portal
+        // Assuming this ProtectedRoute is wrapping admin routes
+        navigate("/portal", { replace: true });
+      }
     }
-  }, [user, loading, navigate, location]);
+  }, [user, loading, isShulowner, isShuladmin, navigate, location]);
 
   if (loading) {
     return (

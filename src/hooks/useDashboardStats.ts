@@ -11,46 +11,46 @@ interface DashboardStats {
 
 export function useDashboardStats() {
   const { roles, isShulowner } = useAuth();
-  
-  // Get org IDs from roles
-  const orgIds = roles
-    .filter((r) => r.organization_id)
+
+  // Get org IDs from roles - specifically for shuls they manage
+  const adminOrgIds = roles
+    .filter((r) => r.organization_id && (r.role === "shuladmin" || r.role === "shulowner"))
     .map((r) => r.organization_id as string);
 
   return useQuery({
-    queryKey: ["dashboard-stats", orgIds, isShulowner],
+    queryKey: ["dashboard-stats", adminOrgIds, isShulowner],
     queryFn: async (): Promise<DashboardStats> => {
-      // For shulowner, get all orgs; otherwise filter by user's orgs
+      // For shulowner, get all orgs; otherwise filter by user's admin orgs
       let memberQuery = supabase
         .from("members")
         .select("id", { count: "exact", head: true })
         .eq("is_active", true);
-      
+
       let campaignQuery = supabase
         .from("campaigns")
         .select("id", { count: "exact", head: true })
         .eq("is_active", true);
-      
+
       let invoiceQuery = supabase
-        .from("invoices")
-        .select("total")
-        .in("status", ["sent", "overdue"]);
-      
+        .from("members")
+        .select("balance")
+        .gt("balance", 0);
+
       // Get first day of current month
       const now = new Date();
       const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      
+
       let paymentQuery = supabase
         .from("payments")
         .select("amount")
         .gte("created_at", firstOfMonth);
 
-      // If not shulowner, filter by org IDs
-      if (!isShulowner && orgIds.length > 0) {
-        memberQuery = memberQuery.in("organization_id", orgIds);
-        campaignQuery = campaignQuery.in("organization_id", orgIds);
-        invoiceQuery = invoiceQuery.in("organization_id", orgIds);
-        paymentQuery = paymentQuery.in("organization_id", orgIds);
+      // If not shulowner, filter by admin org IDs
+      if (!isShulowner && adminOrgIds.length > 0) {
+        memberQuery = memberQuery.in("organization_id", adminOrgIds);
+        campaignQuery = campaignQuery.in("organization_id", adminOrgIds);
+        invoiceQuery = invoiceQuery.in("organization_id", adminOrgIds);
+        paymentQuery = paymentQuery.in("organization_id", adminOrgIds);
       }
 
       const [membersRes, campaignsRes, invoicesRes, paymentsRes] = await Promise.all([
@@ -61,7 +61,7 @@ export function useDashboardStats() {
       ]);
 
       const openInvoicesTotal = (invoicesRes.data || []).reduce(
-        (sum, inv) => sum + Number(inv.total || 0),
+        (sum, m) => sum + Number(m.balance || 0),
         0
       );
 
@@ -77,6 +77,6 @@ export function useDashboardStats() {
         revenueThisMonth: revenueTotal,
       };
     },
-    enabled: isShulowner || orgIds.length > 0,
+    enabled: isShulowner || adminOrgIds.length > 0,
   });
 }

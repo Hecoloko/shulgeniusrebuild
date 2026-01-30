@@ -170,7 +170,7 @@ export default function MemberDetail() {
   // Calculate totals
   const totalInvoiced = invoices?.reduce((sum, inv) => sum + (inv.total || 0), 0) || 0;
   const totalPaid = payments?.reduce((sum, pmt) => sum + (pmt.amount || 0), 0) || 0;
-  const outstanding = member?.balance || 0;
+  const outstanding = Math.max(0, totalInvoiced - totalPaid);
 
   // Update member mutation
   const updateMemberMutation = useMutation({
@@ -255,8 +255,18 @@ export default function MemberDetail() {
         },
       });
 
-      if (error) throw new Error(error.message);
-      if (data.error) throw new Error(data.error);
+      console.log("Process payment response:", data);
+
+      if (error) {
+        console.error("Process payment error:", error);
+        throw new Error(error.message || "Unknown error occurred");
+      }
+
+      if (data && data.error) {
+        console.error("Payment declined/failed:", data);
+        throw new Error(typeof data.error === 'string' ? data.error : JSON.stringify(data.error));
+      }
+
       return data;
     },
     onSuccess: (data) => {
@@ -292,14 +302,63 @@ export default function MemberDetail() {
     },
   });
 
+  // Send member invite email (new or existing user)
+  const sendMemberInviteEmail = async () => {
+    try {
+      if (!org || !member) return;
+
+      const response = await supabase.functions.invoke("invite-member", {
+        body: {
+          memberId: member.id,
+          origin: window.location.origin,
+        },
+      });
+
+      if (response.error) {
+        console.error("Invite error:", response.error);
+        toast.error("Failed to send invite: " + response.error.message);
+      } else {
+        const { type } = response.data || {};
+        const isExisting = type === "existing_member_invite";
+        toast.success(isExisting ? "Invitation sent to existing user" : "Account setup email sent");
+      }
+    } catch (err) {
+      console.error("Invite error:", err);
+      toast.error("Failed to send invite");
+    }
+  };
+
   // Delete payment method mutation
   const deletePaymentMethodMutation = useMutation({
     mutationFn: async (paymentMethodId: string) => {
-      const { error } = await supabase
-        .from("payment_methods")
-        .delete()
-        .eq("id", paymentMethodId);
-      if (error) throw error;
+      if (!memberId || !orgId) throw new Error("Missing member or organization ID");
+
+      const { data, error } = await supabase.functions.invoke("cardknox-customer", {
+        body: {
+          action: "delete_card",
+          organizationId: orgId,
+          memberId: memberId,
+          paymentMethodId: paymentMethodId,
+        },
+      });
+
+      if (error) {
+        // Try to parse the error context for more details if available
+        let errorMessage = error.message;
+        try {
+          if (error instanceof Error && 'context' in error) {
+            const context = (error as any).context;
+            const json = await context.json();
+            if (json && json.error) {
+              errorMessage = json.error + (json.cardknoxResult?.Error ? ` (${json.cardknoxResult.Error})` : "");
+            }
+          }
+        } catch (e) {
+          console.error("Failed to parse error context", e);
+        }
+        throw new Error(errorMessage);
+      }
+      if (data?.error) throw new Error(data.error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["member-payment-methods", memberId] });
@@ -421,6 +480,29 @@ export default function MemberDetail() {
                     <Mail className="h-4 w-4" />
                     {member.email}
                   </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  {!member.user_id && (
+                    <Button
+                      variant="outline"
+                      onClick={sendMemberInviteEmail}
+                      className="gap-2 border-gold text-gold hover:bg-gold/5"
+                    >
+                      <Mail className="h-4 w-4" />
+                      Resend Invite
+                    </Button>
+                  )}
+                  {member.user_id && (
+                    <Button
+                      variant="ghost"
+                      onClick={sendMemberInviteEmail}
+                      className="gap-2 text-muted-foreground"
+                    >
+                      <Mail className="h-4 w-4" />
+                      Notify Member (Resend Access)
+                    </Button>
+                  )}
                 </div>
 
                 <div className="text-right">
@@ -714,8 +796,8 @@ export default function MemberDetail() {
                                 invoice.status === "paid"
                                   ? "default"
                                   : invoice.status === "overdue"
-                                  ? "destructive"
-                                  : "secondary"
+                                    ? "destructive"
+                                    : "secondary"
                               }
                             >
                               {invoice.status}
@@ -809,7 +891,7 @@ export default function MemberDetail() {
                                 <p className="font-medium">{campaignName}</p>
                                 <p className="text-sm text-muted-foreground">
                                   {formatCurrency(Number(sub.total_amount))} • {sub.frequency.replace("_", " ")}
-                                  {sub.payment_type === "installments" && 
+                                  {sub.payment_type === "installments" &&
                                     ` • ${sub.installments_paid}/${sub.installments_total} paid`}
                                 </p>
                               </div>
@@ -841,7 +923,7 @@ export default function MemberDetail() {
                               )}
 
                               {/* Delete Button with Confirmation */}
-                              <AlertDialog 
+                              <AlertDialog
                                 open={deletingSubscription?.id === sub.id}
                                 onOpenChange={(open) => !open && setDeletingSubscription(null)}
                               >
@@ -941,10 +1023,10 @@ export default function MemberDetail() {
                   {paymentMethods && paymentMethods.length > 0 ? (
                     <div className="grid md:grid-cols-2 gap-4">
                       {paymentMethods.map((pm) => {
-                        const displayName = pm.nickname 
+                        const displayName = pm.nickname
                           ? `${pm.nickname} - ${pm.card_brand || "Card"} •••• ${pm.card_last_four}`
                           : `${pm.card_brand || "Card"} •••• ${pm.card_last_four}`;
-                        
+
                         return (
                           <div
                             key={pm.id}
@@ -962,7 +1044,7 @@ export default function MemberDetail() {
                             {pm.is_default && (
                               <Badge variant="secondary">Default</Badge>
                             )}
-                            <AlertDialog 
+                            <AlertDialog
                               open={deletingCardId === pm.id}
                               onOpenChange={(open) => !open && setDeletingCardId(null)}
                             >
@@ -1019,7 +1101,7 @@ export default function MemberDetail() {
                   )}
                 </CardContent>
               </Card>
-              
+
               {/* Add Card Modal */}
               <AddCardModal
                 member={member}

@@ -37,32 +37,48 @@ export default function Login() {
 
     // Get user to check roles
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (user) {
-      // Check if user has admin/owner role
-      const { data: roles } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id);
-      
-      const isAdmin = roles?.some(r => r.role === "shuladmin" || r.role === "shulowner");
-      
+      // Small delay to allow roles to propagate if just signed up
+      const fetchRoles = async (retryCount = 0): Promise<any[]> => {
+        const { data: roles } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user.id);
+
+        if ((!roles || roles.length === 0) && retryCount < 2) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          return fetchRoles(retryCount + 1);
+        }
+        return roles || [];
+      };
+
+      const roles = await fetchRoles();
+      const isAdmin = roles.some(r => r.role === "shuladmin" || r.role === "shulowner");
+
       if (isAdmin) {
         toast({
           title: "Welcome back!",
-          description: "You've been signed in successfully.",
+          description: "Signed in as administrator.",
         });
-        navigate("/");
-      } else {
-        // Member only - redirect to member portal
+        navigate("/dashboard", { replace: true });
+      } else if (roles.length > 0) {
+        // Must be a member
         toast({
           title: "Welcome!",
           description: "Redirecting to member portal.",
         });
-        navigate("/portal");
+        navigate("/portal", { replace: true });
+      } else {
+        // No roles found - might be a new user where roles are still syncing
+        toast({
+          title: "Accessing Dashboard",
+          description: "Taking you to your homepage.",
+        });
+        navigate("/dashboard", { replace: true });
       }
     } else {
-      navigate("/");
+      navigate("/dashboard", { replace: true });
     }
 
     setIsLoading(false);
@@ -91,18 +107,9 @@ export default function Login() {
         description: `Welcome to ShulGenius! Your shul "${shulName}" is ready.`,
       });
 
-      // Now sign them in
-      const { error: signInError } = await signIn(email, password);
-      
-      if (signInError) {
-        toast({
-          title: "Account created",
-          description: "Please sign in with your new credentials.",
-        });
-        setMode("login");
-      } else {
-        navigate("/");
-      }
+      // Redirect to success page (Check Email)
+      navigate("/signup-success");
+
     } catch (err: any) {
       toast({
         title: "Signup Failed",
@@ -150,7 +157,6 @@ export default function Login() {
             </div>
             <div>
               <h1 className="text-4xl font-bold text-white">ShulGenius</h1>
-              <p className="text-gold text-lg">Antigravity</p>
             </div>
           </motion.div>
 
@@ -160,7 +166,7 @@ export default function Login() {
             transition={{ delay: 0.4, duration: 0.5 }}
           >
             <h2 className="text-3xl font-semibold text-white mb-4">
-              {mode === "login" 
+              {mode === "login"
                 ? "The Operating System for Your Synagogue"
                 : "Start Managing Your Shul Today"
               }
@@ -190,7 +196,6 @@ export default function Login() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-foreground">ShulGenius</h1>
-              <p className="text-gold text-sm">Antigravity</p>
             </div>
           </div>
 
@@ -206,7 +211,7 @@ export default function Login() {
                 {mode === "login" ? "Welcome back" : "Create your account"}
               </h2>
               <p className="text-muted-foreground mb-8">
-                {mode === "login" 
+                {mode === "login"
                   ? "Sign in to continue to your dashboard"
                   : "Set up your shul in just a few seconds"
                 }
