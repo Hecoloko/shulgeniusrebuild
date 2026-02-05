@@ -61,7 +61,6 @@ serve(async (req) => {
         const adminEmail = member.organizations?.email;
         const memberEmail = member.email;
         const memberName = `${member.first_name} ${member.last_name}`;
-        const inviteToken = member.invite_token;
 
         if (!memberEmail) {
             return new Response(

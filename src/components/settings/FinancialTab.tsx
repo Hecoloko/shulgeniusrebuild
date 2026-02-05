@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { 
-  CreditCard, Plus, Trash2, Zap, 
+import {
+  CreditCard, Plus, Trash2, Zap,
   Loader2, Package, Check, Edit2
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -109,12 +109,12 @@ export function FinancialTab() {
       const credentials: Record<string, string> = {};
       if (processorType === "stripe") {
         if (!stripeAccountId && !stripePublishableKey) throw new Error("At least one Stripe credential required");
-        if (stripeAccountId) credentials.account_id = stripeAccountId;
-        if (stripePublishableKey) credentials.publishable_key = stripePublishableKey;
+        if (stripeAccountId) credentials.account_id = stripeAccountId.trim();
+        if (stripePublishableKey) credentials.publishable_key = stripePublishableKey.trim();
       } else {
         if (!cardknoxIfieldsKey || !cardknoxTransactionKey) throw new Error("Both Cardknox keys required");
-        credentials.ifields_key = cardknoxIfieldsKey;
-        credentials.transaction_key = cardknoxTransactionKey;
+        credentials.ifields_key = cardknoxIfieldsKey.trim();
+        credentials.transaction_key = cardknoxTransactionKey.trim();
       }
 
       // Check if this is the first processor (make it default)
@@ -149,8 +149,15 @@ export function FinancialTab() {
       setProcessorOpen(false);
       resetProcessorForm();
     },
-    onError: (err: Error) => {
-      toast.error("Failed: " + err.message);
+    onError: (err: any) => {
+      console.error("Payment Processor Error:", err);
+      // Detailed error for debugging "token" or "key" issues
+      const errorMessage = err.message || "Unknown error occurred";
+      const errorDetails = err.details || err.hint || "";
+
+      toast.error(`Failed: ${errorMessage}`, {
+        description: errorDetails ? `Details: ${errorDetails}. Check console for more info.` : "Check console for more info."
+      });
     },
   });
 
@@ -158,7 +165,7 @@ export function FinancialTab() {
   const setDefaultMutation = useMutation({
     mutationFn: async (processorId: string) => {
       if (!orgId) throw new Error("No organization");
-      
+
       // First, unset all defaults for this org
       await supabase
         .from("payment_processors")
@@ -368,8 +375,8 @@ export function FinancialTab() {
 
                 <div className="space-y-2">
                   <Label>Processor Type</Label>
-                  <Select 
-                    value={processorType} 
+                  <Select
+                    value={processorType}
                     onValueChange={(v) => setProcessorType(v as ProcessorType)}
                     disabled={editMode}
                   >
@@ -435,7 +442,7 @@ export function FinancialTab() {
                 <Button variant="outline" onClick={() => setProcessorOpen(false)}>
                   Cancel
                 </Button>
-                <Button 
+                <Button
                   className="btn-gold"
                   onClick={() => processorMutation.mutate()}
                   disabled={processorMutation.isPending}
@@ -478,19 +485,18 @@ export function FinancialTab() {
                       <span className="capitalize">{processor.processor_type}</span>
                     </TableCell>
                     <TableCell>
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                        processor.is_default 
-                          ? "bg-success/10 text-success" 
-                          : "bg-muted text-muted-foreground"
-                      }`}>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${processor.is_default
+                        ? "bg-success/10 text-success"
+                        : "bg-muted text-muted-foreground"
+                        }`}>
                         {processor.is_default ? "Default" : "Connected"}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
                         {!processor.is_default && (
-                          <Button 
-                            variant="ghost" 
+                          <Button
+                            variant="ghost"
                             size="sm"
                             onClick={() => setDefaultMutation.mutate(processor.id)}
                             disabled={setDefaultMutation.isPending}
@@ -533,7 +539,7 @@ export function FinancialTab() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove Payment Processor?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove "{selectedProcessor?.name}" from your organization. 
+              This will remove "{selectedProcessor?.name}" from your organization.
               Existing transactions will not be affected.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -648,7 +654,7 @@ export function FinancialTab() {
                 <Button variant="outline" onClick={() => setItemOpen(false)}>
                   Cancel
                 </Button>
-                <Button 
+                <Button
                   className="btn-gold"
                   onClick={() => addItemMutation.mutate()}
                   disabled={addItemMutation.isPending}
@@ -690,13 +696,12 @@ export function FinancialTab() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                        item.type === "subscription"
-                          ? "bg-primary/10 text-primary"
-                          : "bg-muted text-muted-foreground"
-                      }`}>
-                        {item.type === "subscription" 
-                          ? `${item.billing_interval}` 
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${item.type === "subscription"
+                        ? "bg-primary/10 text-primary"
+                        : "bg-muted text-muted-foreground"
+                        }`}>
+                        {item.type === "subscription"
+                          ? `${item.billing_interval}`
                           : "One-time"}
                       </span>
                     </TableCell>

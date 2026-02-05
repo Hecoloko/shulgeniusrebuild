@@ -184,37 +184,7 @@ function WorldFloor() {
 // --- MAIN WRAPPER ---
 export default function GlobalShulNetwork() {
     return (
-        <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
-            <Suspense fallback={<div className="w-full h-full bg-[#FAFAF9]" />}>
-                <Canvas
-                    dpr={2} // Locked to 2 for sharp HD quality
-                    gl={{
-                        antialias: true,
-                        alpha: true,
-                        powerPreference: "high-performance",
-                        precision: "highp"
-                    }}
-                    camera={{ position: [0, 8, 20], fov: 60, near: 0.1, far: 500 }}
-                    style={{ background: '#FAFAF9' }}
-                >
-                    <color attach="background" args={["#FAFAF9"]} />
-                    <fog attach="fog" args={["#FAFAF9", 10, 350]} />
-
-                    <ambientLight intensity={1.8} />
-                    <pointLight position={[0, 80, 0]} intensity={3} color="#facc15" />
-
-                    <FlightDrone />
-                    <WorldFloor />
-
-                    {Array.from({ length: 44 }).map((_, i) => (
-                        <ThemedEntity key={i} index={i} />
-                    ))}
-
-                    {/* STARS & SPARKLES IN CYBER GOLD */}
-                    <Stars radius={250} depth={50} count={3500} factor={6} color="#facc15" fade speed={0.4} />
-                    <Sparkles count={400} scale={220} size={3} speed={0.4} color="#facc15" />
-                </Canvas>
-            </Suspense>
+        <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-[#FAFAF9]">
             {/* Soft atmospheric gradient */}
             <div className="absolute inset-0 bg-gradient-to-b from-stone-50/20 via-transparent to-stone-50/80 pointer-events-none" />
         </div>
